@@ -6,7 +6,7 @@ hard-coded: the `Shopify Store Company` / `Shopify Store Tax` /
 """
 
 import frappe
-from frappe.utils import cint, get_datetime
+from frappe.utils import cint, get_datetime, get_system_timezone
 
 from .constants import (
 	AUTH_METHOD_OAUTH,
@@ -202,7 +202,7 @@ class StoreConfig:
 		This is checked **before** the existing-order lookup, so a historical
 		order is never imported and never refreshed by a late webhook/poll.
 		"""
-		created = normalize_datetime((order or {}).get("created_at"))
+		created = normalize_datetime((order or {}).get("created_at"), tz=get_system_timezone())
 		if not created:
 			return False
 		if self.pull_orders_since:
@@ -393,6 +393,9 @@ def validate_store(doc):
 	_validate_taxes(doc)
 	_validate_warehouses(doc)
 
+	if cint(doc.add_shipping_as_item) and not doc.shipping_item:
+		frappe.throw("Add Shipping as an Item is on, but no Shipping Item is selected.")
+
 
 def _validate_companies(doc):
 	if not doc.companies:
@@ -504,6 +507,7 @@ def _validate_taxes(doc):
 
 def _validate_warehouses(doc):
 	seen = set()
+	seen_warehouses = set()
 	for row in doc.warehouse_mapping or []:
 		if not row.company:
 			frappe.throw("Every warehouse mapping row needs a Company.")
@@ -515,6 +519,16 @@ def _validate_warehouses(doc):
 				f"Location {row.shopify_location_id} is mapped twice for company {row.company}."
 			)
 		seen.add(key)
+
+		# One ERPNext warehouse must not feed two Shopify locations: inventory
+		# would be pushed twice (the same stock advertised in both places).
+		warehouse_key = (row.company, row.warehouse)
+		if warehouse_key in seen_warehouses:
+			frappe.throw(
+				f"Warehouse {row.warehouse} is mapped to more than one Shopify location "
+				f"for company {row.company}. Map each location to its own warehouse."
+			)
+		seen_warehouses.add(warehouse_key)
 		meta = frappe.db.get_value("Warehouse", row.warehouse, ["company", "is_group"], as_dict=True)
 		if not meta or meta.company != row.company:
 			frappe.throw(f"Warehouse {row.warehouse} does not belong to company {row.company}.")

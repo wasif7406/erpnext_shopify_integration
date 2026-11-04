@@ -21,15 +21,16 @@ from .constants import (
 	ORDER_ID_FIELD,
 	ORDER_NUMBER_FIELD,
 	ORDER_STATUS_FIELD,
+	POLL_OVERLAP_MINUTES,
 	STORE_FIELD,
 	STORE_DOCTYPE,
 )
 from .customer import ensure_customer, find_customer
 from .exceptions import ShopifyBudgetExhausted, ShopifyConfigError, ShopifyUnmappedProduct
-from .payloads import is_cancelled, is_paid, normalize_datetime
+from .payloads import is_cancelled, is_paid
 from .product import ensure_items
 from .taxes import get_dummy_price_list, get_dummy_tax_category, get_order_taxes
-from .utils import Run, log_error, now, set_values
+from .utils import Run, log_error, now, set_values, site_datetime
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ def _create_sales_order(cfg: StoreConfig, order: dict, run=None):
 	for item in items:
 		item["cost_center"] = cost_center
 
-	created = normalize_datetime(order.get("created_at"))
+	created = site_datetime(order.get("created_at"))
 	transaction_date = created.date() if created else nowdate()
 
 	so = frappe.get_doc(
@@ -205,6 +206,20 @@ def _create_sales_order(cfg: StoreConfig, order: dict, run=None):
 		raise
 
 	frappe.db.commit()
+
+	# The invoice/receivable must equal what Shopify charged. A mismatch means
+	# a tax/shipping/discount mapping is wrong; it is logged, not deleted.
+	expected_total = flt(order.get("current_total_price") or order.get("total_price"))
+	if expected_total and abs(flt(so.grand_total) - expected_total) > 0.05:
+		log_error(
+			"Shopify: order total mismatch",
+			f"{so.name} / Shopify {order.get('name')}: ERPNext {so.grand_total} vs "
+			f"Shopify {expected_total}",
+			"Sales Order",
+			so.name,
+		)
+		if run:
+			run.note(f"total mismatch {so.name}: {so.grand_total} vs {expected_total}")
 
 	if order.get("note"):
 		so.add_comment(text=f"Shopify order note: {order.get('note')}")
@@ -292,7 +307,7 @@ def poll_orders(cfg: StoreConfig, run: Run, lookback_days: int | None = None):
 	"""Catch orders whose webhook was missed (or that predate the app)."""
 	since = get_datetime(cfg.store.last_order_sync_on) if cfg.store.last_order_sync_on else None
 	if since:
-		since = since - datetime.timedelta(minutes=5)
+		since = since - datetime.timedelta(minutes=POLL_OVERLAP_MINUTES)
 	else:
 		days = lookback_days if lookback_days is not None else int(cfg.store.order_sync_lookback_days or 3)
 		since = now_datetime() - datetime.timedelta(days=max(1, days))
@@ -505,8 +520,12 @@ def _apply_currency(so, order, company_cfg):
 		raise ShopifyConfigError(
 			f"No exchange rate {order_currency} -> {company_currency} for {date}: {exc}"
 		) from exc
+	if not flt(rate):
+		raise ShopifyConfigError(
+			f"No usable exchange rate {order_currency} -> {company_currency} for {date}."
+		)
 	so.currency = order_currency
-	so.conversion_rate = flt(rate) or 1
+	so.conversion_rate = flt(rate)
 	so.price_list_currency = order_currency
 	so.plc_conversion_rate = so.conversion_rate
 

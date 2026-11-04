@@ -22,8 +22,7 @@ from .constants import (
 	STORE_FIELD,
 )
 from .order import find_invoice, find_sales_order
-from .payloads import normalize_datetime
-from .utils import Run, log_error, now
+from .utils import Run, log_error, now, site_datetime
 
 
 def ensure_invoice(cfg: StoreConfig, so, order: dict, run: Run | None = None):
@@ -104,7 +103,7 @@ def _posting_date(company_cfg, order):
 		value = order.get("created_at")
 	else:
 		return getdate(nowdate())
-	parsed = normalize_datetime(value)
+	parsed = site_datetime(value)
 	return parsed.date() if parsed else getdate(nowdate())
 
 

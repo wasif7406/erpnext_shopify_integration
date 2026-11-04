@@ -36,6 +36,17 @@ def as_datetime(value):
 		return None
 
 
+def site_datetime(value):
+	"""Shopify timestamp -> naive datetime in the site's timezone."""
+	from .payloads import normalize_datetime
+
+	try:
+		tz = frappe.utils.get_system_timezone()
+	except Exception:
+		tz = None
+	return normalize_datetime(value, tz=tz)
+
+
 # ---------------------------------------------------------------------------
 # Errors / logs
 # ---------------------------------------------------------------------------

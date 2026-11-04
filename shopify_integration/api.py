@@ -145,9 +145,15 @@ def provision_warehouse_mapping(store):
 		frappe.throw(_("Shopify returned no locations for this store."))
 
 	added = 0
+	skipped = 0
 	for company_row in store_doc.companies or []:
 		if not company_row.company or not company_row.default_warehouse:
 			continue
+		used_warehouses = {
+			row.warehouse
+			for row in store_doc.warehouse_mapping or []
+			if row.company == company_row.company
+		}
 		for location in locations:
 			exists = any(
 				row.company == company_row.company
@@ -155,6 +161,11 @@ def provision_warehouse_mapping(store):
 				for row in store_doc.warehouse_mapping or []
 			)
 			if exists:
+				continue
+			# One warehouse cannot represent two locations: the same stock would
+			# be advertised at both. Skip and let the user map a real one.
+			if company_row.default_warehouse in used_warehouses:
+				skipped += 1
 				continue
 			store_doc.append(
 				"warehouse_mapping",
@@ -164,12 +175,13 @@ def provision_warehouse_mapping(store):
 					"warehouse": company_row.default_warehouse,
 				},
 			)
+			used_warehouses.add(company_row.default_warehouse)
 			added += 1
 
 	if added:
 		store_doc.save(ignore_permissions=True)
 		frappe.db.commit()
-	return {"locations": locations, "added": added}
+	return {"locations": locations, "added": added, "skipped": skipped}
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +210,8 @@ def sync_now(store, mode="orders", background=0):
 			store=store,
 		)
 		return {"queued": True, "store": store, "mode": mode}
+	if mode in ("inventory", "stock"):
+		return run_locked(kind, store, fn, force=True)
 	return run_locked(kind, store, fn)
 
 

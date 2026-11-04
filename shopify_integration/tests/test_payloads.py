@@ -26,6 +26,17 @@ def test_plain_date_and_empty():
 	assert normalize_datetime(None) is None
 
 
+def test_utc_timestamp_is_converted_to_site_timezone():
+	# 11:29 UTC is 16:29 in Asia/Karachi (UTC+5).
+	assert normalize_datetime("2026-09-27T11:29:59Z", tz="Asia/Karachi") == datetime.datetime(
+		2026, 9, 27, 16, 29, 59
+	)
+
+
+def test_offset_timestamp_keeps_wall_clock_without_tz():
+	assert normalize_datetime("2026-09-27T16:29:59+0500") == datetime.datetime(2026, 9, 27, 16, 29, 59)
+
+
 def test_line_rate_subtracts_discount_per_unit():
 	line = {
 		"price": "1000.00",

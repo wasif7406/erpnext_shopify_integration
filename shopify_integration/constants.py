@@ -6,7 +6,7 @@ Anything that can differ per shop or per ERPNext company belongs in
 
 # Bumped whenever we need to prove which code a site is actually running; call
 # `shopify_integration.api.health` after a deploy and compare.
-BUILD = "2026-11-04.1"
+BUILD = "2026-11-04.2"
 
 APP = "shopify_integration"
 MODULE = "Shopify Integration"
@@ -116,6 +116,10 @@ LEGACY_SETTING_DOCTYPE = "Shopify Setting"
 LEGACY_OLD_SETTING_DOCTYPE = "Shopify Settings"
 LEGACY_ITEM_DOCTYPE = "Ecommerce Item"
 LEGACY_LOG_DOCTYPE = "Ecommerce Integration Log"
+
+# Re-read this much of the recent window on every poll, so an order whose
+# import failed transiently is retried even if it is not updated again.
+POLL_OVERLAP_MINUTES = 60
 
 # How many consecutive failures before a store is flagged instead of hammered.
 MAX_SYNC_FAILURES = 5

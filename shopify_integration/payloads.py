@@ -11,6 +11,7 @@ import datetime
 import hashlib
 import hmac
 import re
+from zoneinfo import ZoneInfo
 
 # Shopify timestamps look like `2026-09-27T16:29:59+0500` (no colon in the
 # offset). Frappe's Datetime column wants `2026-09-27 16:29:59`.
@@ -31,30 +32,44 @@ def money(value) -> float:
 	return round(to_float(value), 2)
 
 
-def normalize_datetime(value):
-	"""Shopify ISO timestamp -> naive local `datetime` (or None).
+def normalize_datetime(value, tz=None):
+	"""Shopify ISO timestamp -> naive `datetime` in `tz` (or None).
 
 	Shopify sends the offset; ERPNext stores a naive datetime in the site's
-	timezone. We keep the wall-clock part of Shopify's timestamp, which is what
-	the merchant sees in the Shopify admin.
+	timezone. When `tz` is given, an aware timestamp is converted to it before
+	the tzinfo is dropped — `17:31Z` becomes `22:31` in Asia/Karachi instead of
+	being mistaken for 17:31 local time. Without `tz`, the wall-clock part is
+	kept (the original behaviour).
 	"""
 	if not value:
 		return None
 	text = str(value).strip().replace("T", " ")
 	text = _OFFSET_WITHOUT_COLON.sub(r"\1:\2", text)
+
+	parsed = None
 	for fmt in ("%Y-%m-%d %H:%M:%S%z", "%Y-%m-%d %H:%M:%S.%f%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
 		try:
 			parsed = datetime.datetime.strptime(text, fmt)
-			return parsed.replace(tzinfo=None)
+			break
 		except ValueError:
 			continue
-	try:
-		# Last resort: dateutil is a Frappe dependency.
-		from dateutil import parser as dateutil_parser
+	if parsed is None:
+		try:
+			# Last resort: dateutil is a Frappe dependency.
+			from dateutil import parser as dateutil_parser
 
-		return dateutil_parser.parse(text).replace(tzinfo=None)
-	except Exception:
-		return None
+			parsed = dateutil_parser.parse(text)
+		except Exception:
+			return None
+
+	if parsed.tzinfo is not None:
+		if tz:
+			try:
+				parsed = parsed.astimezone(ZoneInfo(tz))
+			except Exception:
+				pass
+		return parsed.replace(tzinfo=None)
+	return parsed
 
 
 def iso_date(value):

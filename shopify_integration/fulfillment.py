@@ -20,9 +20,8 @@ from .constants import (
 )
 from .exceptions import ShopifyConfigError
 from .order import find_sales_order
-from .payloads import normalize_datetime
 from .product import get_item_code
-from .utils import Run, log_error, now
+from .utils import Run, log_error, now, site_datetime
 
 
 def find_delivery_note(cfg: StoreConfig, fulfillment_id):
@@ -128,7 +127,7 @@ def _create_delivery_note(cfg: StoreConfig, so, order, fulfillment, run=None):
 
 
 def _posting_date(fulfillment):
-	parsed = normalize_datetime(fulfillment.get("created_at"))
+	parsed = site_datetime(fulfillment.get("created_at"))
 	return parsed.date() if parsed else getdate(nowdate())
 
 

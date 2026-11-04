@@ -154,9 +154,10 @@ def ensure_items(cfg: StoreConfig, order: dict, budget: RequestBudget | None = N
 	"""
 	company_cfg = cfg.resolve_company(order)
 	warehouse = warehouse_for(cfg, company_cfg)
-	from frappe.utils import nowdate
+	from .utils import site_datetime
 
-	delivery_date = (order.get("created_at") or "")[:10] or nowdate()
+	created = site_datetime(order.get("created_at"))
+	delivery_date = created.date().isoformat() if created else None
 	taxes_inclusive = bool(order.get("taxes_included"))
 
 	items = []

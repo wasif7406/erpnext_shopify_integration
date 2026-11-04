@@ -30,7 +30,7 @@ def poll_all_stores():
 
 def push_inventory_all_stores():
 	_enqueue_for_stores(
-		"shopify_integration.tasks.manual_inventory",
+		"shopify_integration.tasks.scheduled_inventory",
 		"shopify-inventory",
 		filters={"enabled": 1, "enable_erpnext_to_shopify": 1, "push_inventory": 1},
 	)
@@ -111,7 +111,12 @@ def manual_poll(store):
 
 
 def manual_inventory(store):
-	return run_locked("manual-inventory", store, push_inventory_locked)
+	# The button/API is an explicit "do it now", so bypass the frequency gate.
+	return run_locked("manual-inventory", store, push_inventory_locked, force=True)
+
+
+def scheduled_inventory(store):
+	return run_locked("inventory", store, push_inventory_locked, force=False)
 
 
 def manual_old_orders(store):
@@ -141,7 +146,7 @@ def poll_store_locked(store):
 	return {"store": store, "seen": run.counters["orders_seen"]}
 
 
-def push_inventory_locked(store):
+def push_inventory_locked(store, force=False):
 	from .config import StoreConfig
 	from .inventory import push_inventory
 	from .utils import Run
@@ -151,7 +156,7 @@ def push_inventory_locked(store):
 		return {"skipped": "inventory push disabled"}
 
 	with Run(store, mode="Inventory", trigger="Scheduler") as run:
-		pushed = push_inventory(cfg, run)
+		pushed = push_inventory(cfg, run, force=force)
 	return {"store": store, "pushed": pushed}
 
 
@@ -191,7 +196,9 @@ def _enqueue_for_stores(method, job_prefix, filters):
 				queue="long",
 				timeout=1800,
 				is_async=True,
-				job_name=f"{job_prefix}-{row}",
+				# Unique per tick: a stale job_id must never suppress the next
+				# tick. Overlap is handled by run_locked(), not by the job name.
+				job_name=f"{job_prefix}-{row}-{now_datetime():%Y%m%d%H%M%S}",
 				store=row,
 			)
 		except Exception:
