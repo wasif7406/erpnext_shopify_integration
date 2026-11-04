@@ -113,6 +113,10 @@ def receive(store=None, key=None):
 # ---------------------------------------------------------------------------
 def run_handler(handler_path: str, payload: dict, store: str, request_id: str | None = None):
 	"""Run a handler and mark the webhook log; used by tests / manual replay."""
+	# The webhook is enqueued from a guest request. Background jobs inherit that
+	# user, and ERPNext's item permission check then rejects the Sales Order.
+	# The connector always writes as Administrator, like the legacy app did.
+	frappe.set_user("Administrator")
 	handler = frappe.get_attr(handler_path)
 	try:
 		result = handler(payload=payload, store=store, request_id=request_id)

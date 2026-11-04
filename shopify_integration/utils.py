@@ -120,6 +120,9 @@ class Run:
 
 	def __exit__(self, exc_type, exc, tb):
 		if exc_type:
+			# Never leave half-created customers/orders behind just because the
+			# run record is committed below.
+			frappe.db.rollback()
 			self.fail("run", str(exc))
 			self.finish("Failed", note=f"{exc_type.__name__}: {exc}")
 			return False

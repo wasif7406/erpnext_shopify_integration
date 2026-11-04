@@ -19,8 +19,10 @@ from .utils import log_error
 # Cron entry points
 # ---------------------------------------------------------------------------
 def poll_all_stores():
+	# Enqueue the *locked* wrapper, not the raw worker: cron and a manual
+	# "Poll Orders Now" must never process the same store concurrently.
 	_enqueue_for_stores(
-		"shopify_integration.tasks.poll_store_locked",
+		"shopify_integration.tasks.manual_poll",
 		"shopify-poll",
 		filters={"enabled": 1, "enable_shopify_to_erpnext": 1, "pull_orders": 1},
 	)
@@ -28,7 +30,7 @@ def poll_all_stores():
 
 def push_inventory_all_stores():
 	_enqueue_for_stores(
-		"shopify_integration.tasks.push_inventory_locked",
+		"shopify_integration.tasks.manual_inventory",
 		"shopify-inventory",
 		filters={"enabled": 1, "enable_erpnext_to_shopify": 1, "push_inventory": 1},
 	)
@@ -36,7 +38,7 @@ def push_inventory_all_stores():
 
 def old_order_sync():
 	_enqueue_for_stores(
-		"shopify_integration.tasks.old_orders_locked",
+		"shopify_integration.tasks.manual_old_orders",
 		"shopify-old-orders",
 		filters={"enabled": 1, "enable_shopify_to_erpnext": 1, "sync_old_orders": 1},
 	)
@@ -110,6 +112,10 @@ def manual_poll(store):
 
 def manual_inventory(store):
 	return run_locked("manual-inventory", store, push_inventory_locked)
+
+
+def manual_old_orders(store):
+	return run_locked("manual-old-orders", store, old_orders_locked)
 
 
 # ---------------------------------------------------------------------------
