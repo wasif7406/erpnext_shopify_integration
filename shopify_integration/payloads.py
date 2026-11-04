@@ -78,6 +78,28 @@ def iso_date(value):
 	return parsed.date() if parsed else None
 
 
+def shopify_time(value, tz):
+	"""Site-local datetime -> the UTC `Z` form Shopify's list filters expect.
+
+	Shopify compares `created_at_min` / `updated_at_min` in UTC. Sending a
+	site-local time with a `Z` suffix silently shifts the window by the site's
+	offset (Asia/Karachi = +5), which would make the poll miss every order
+	created in those five hours.
+	"""
+	local = normalize_datetime(value, tz=tz)
+	if not local:
+		return None
+	try:
+		zone = ZoneInfo(tz)
+	except Exception:
+		zone = datetime.timezone.utc
+	return (
+		local.replace(tzinfo=zone)
+		.astimezone(datetime.timezone.utc)
+		.strftime("%Y-%m-%dT%H:%M:%SZ")
+	)
+
+
 def total_discount(line_item) -> float:
 	"""Sum of the line's discount allocations."""
 	return sum(money(item.get("amount")) for item in (line_item.get("discount_allocations") or []))

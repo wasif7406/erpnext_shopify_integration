@@ -13,7 +13,7 @@ but no store and is adopted by the first store that sees it.
 import datetime
 
 import frappe
-from frappe.utils import flt, get_datetime, now_datetime, nowdate
+from frappe.utils import flt, get_datetime, get_system_timezone, now_datetime, nowdate
 
 from .client import ShopifyClient
 from .config import StoreConfig, config, cost_center_for, naming_series
@@ -27,7 +27,7 @@ from .constants import (
 )
 from .customer import ensure_customer, find_customer
 from .exceptions import ShopifyBudgetExhausted, ShopifyConfigError, ShopifyUnmappedProduct
-from .payloads import is_cancelled, is_paid
+from .payloads import is_cancelled, is_paid, shopify_time
 from .product import ensure_items
 from .taxes import get_dummy_price_list, get_dummy_tax_category, get_order_taxes
 from .utils import Run, log_error, now, set_values, site_datetime
@@ -531,9 +531,8 @@ def _apply_currency(so, order, company_cfg):
 
 
 def _shopify_time(value) -> str:
-	"""ERPNext datetime -> the ISO-8601 form Shopify's list filters expect."""
-	parsed = get_datetime(value)
-	return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+	"""ERPNext (site-local) datetime -> UTC ISO-8601 with a `Z` suffix."""
+	return shopify_time(value, get_system_timezone())
 
 
 def _budget(run):

@@ -13,6 +13,7 @@ from shopify_integration.payloads import (
 	line_net_rate,
 	normalize_datetime,
 	shipping_net_amount,
+	shopify_time,
 	valid_shopify_signature,
 )
 
@@ -35,6 +36,10 @@ def test_utc_timestamp_is_converted_to_site_timezone():
 
 def test_offset_timestamp_keeps_wall_clock_without_tz():
 	assert normalize_datetime("2026-09-27T16:29:59+0500") == datetime.datetime(2026, 9, 27, 16, 29, 59)
+
+
+def test_shopify_filter_time_converts_site_local_to_utc():
+	assert shopify_time("2026-11-04 22:29:00", "Asia/Karachi") == "2026-11-04T17:29:00Z"
 
 
 def test_line_rate_subtracts_discount_per_unit():
