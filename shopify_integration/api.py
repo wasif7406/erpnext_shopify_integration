@@ -10,7 +10,7 @@ from . import constants
 from .client import ShopifyClient
 from .config import StoreConfig, legacy_store_name
 from .constants import WEBHOOK_TOPICS
-from .doctype.shopify_store.shopify_store import build_webhook_url
+from .shopify_integration.doctype.shopify_store.shopify_store import build_webhook_url
 from .exceptions import ShopifyIntegrationError
 from .utils import log_error, now as now_dt
 
