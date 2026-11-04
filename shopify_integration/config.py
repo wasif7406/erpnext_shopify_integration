@@ -338,12 +338,25 @@ def validate_store(doc):
 			"One store document owns one shop domain (multi-company is configured inside it)."
 		)
 
+	# Credentials are deliberately *not* mandatory at save time: a store is
+	# often created first and the token/secret pasted afterwards. The client
+	# raises a clear authentication error on the first real API call.
 	if doc.authentication_method == AUTH_METHOD_STATIC:
 		if not doc.get_password("access_token", raise_exception=False):
-			frappe.throw("An Access Token is required for Static Token authentication.")
+			frappe.msgprint(
+				"No Access Token is set yet; the store can be saved but API calls will fail "
+				"until it is filled in.",
+				indicator="orange",
+				alert=True,
+			)
 	elif doc.authentication_method == AUTH_METHOD_OAUTH:
 		if not doc.client_id or not doc.get_password("client_secret", raise_exception=False):
-			frappe.throw("Client ID and Client Secret are required for OAuth 2.0 authentication.")
+			frappe.msgprint(
+				"Client ID / Client Secret are not set yet; the store can be saved but API "
+				"calls will fail until they are filled in.",
+				indicator="orange",
+				alert=True,
+			)
 
 	if not doc.authentication_method:
 		doc.authentication_method = AUTH_METHOD_STATIC
@@ -439,9 +452,12 @@ def _validate_company_defaults(doc, row):
 		if meta.is_group:
 			frappe.throw(f"Account {row.cash_bank_account} is a group account; select a leaf account.")
 	if row.default_sales_tax_account:
-		_validate_account_company(row.default_sales_tax_account, company)
+		# Tax heads may be group accounts: the legacy Shopify configuration
+		# uses `Duties and Taxes - AN` and `Indirect Income - AN`, and ERPNext
+		# accepts group accounts on Actual tax rows.
+		_validate_account_company(row.default_sales_tax_account, company, allow_group=True)
 	if row.default_shipping_charges_account:
-		_validate_account_company(row.default_shipping_charges_account, company)
+		_validate_account_company(row.default_shipping_charges_account, company, allow_group=True)
 
 
 def _validate_taxes(doc):
@@ -457,7 +473,7 @@ def _validate_taxes(doc):
 		seen.add(key)
 		if not row.tax_account:
 			frappe.throw(f"Tax '{row.shopify_tax}' needs an ERPNext account.")
-		_validate_account_company(row.tax_account, row.company)
+		_validate_account_company(row.tax_account, row.company, allow_group=True)
 
 
 def _validate_warehouses(doc):
@@ -480,7 +496,7 @@ def _validate_warehouses(doc):
 			frappe.throw(f"Warehouse {row.warehouse} is a group; select a leaf warehouse.")
 
 
-def _validate_account_company(account, company):
+def _validate_account_company(account, company, allow_group=False):
 	if not account:
 		return
 	meta = frappe.db.get_value("Account", account, ["company", "is_group"], as_dict=True)
@@ -488,7 +504,7 @@ def _validate_account_company(account, company):
 		frappe.throw(f"Account {account} does not exist.")
 	if meta.company != company:
 		frappe.throw(f"Account {account} belongs to {meta.company}, not {company}.")
-	if meta.is_group:
+	if meta.is_group and not allow_group:
 		frappe.throw(f"Account {account} is a group account; select a leaf account.")
 
 
