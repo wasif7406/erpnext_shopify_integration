@@ -160,21 +160,19 @@ def ensure_items(cfg: StoreConfig, order: dict, budget: RequestBudget | None = N
 	taxes_inclusive = bool(order.get("taxes_included"))
 
 	items = []
+	missing = []
 	for line in order.get("line_items") or []:
 		item_code = get_item_code(cfg, line)
 		if not item_code:
 			if not cfg.pull_products:
-				raise ShopifyConfigError(
-					f"Shopify Store {cfg.name}: order {order.get('name')} line "
-					f"'{line.get('title')}' (SKU {line.get('sku') or '—'}) has no ERPNext item, "
-					"and 'Pull Products' is off."
-				)
+				# Explicit mapping only: never invent an Item for a product the
+				# merchant did not list in Shopify Item Map.
+				missing.append(f"{line.get('title') or line.get('name')} (SKU {line.get('sku') or '—'})")
+				continue
 			item_code = create_items_from_line(cfg, line, company_cfg, budget=budget, run=run)
 		if not item_code:
-			raise ShopifyConfigError(
-				f"Shopify Store {cfg.name}: could not create an item for "
-				f"'{line.get('title')}' (SKU {line.get('sku') or '—'})."
-			)
+			missing.append(f"{line.get('title') or line.get('name')} (SKU {line.get('sku') or '—'})")
+			continue
 
 		qty = flt(line.get("quantity"))
 		rate = line_net_rate(line, taxes_inclusive=taxes_inclusive)
@@ -196,6 +194,16 @@ def ensure_items(cfg: StoreConfig, order: dict, budget: RequestBudget | None = N
 				else 0,
 				"shopify_line_item_id": str(line.get("id") or ""),
 			}
+		)
+
+	if missing:
+		from .exceptions import ShopifyUnmappedProduct
+
+		raise ShopifyUnmappedProduct(
+			f"Shopify order {order.get('name')} has no explicit item mapping for: "
+			+ "; ".join(missing[:10])
+			+ ". Add a Shopify Item Map row (SKU or product/variant id), or enable "
+			"'Pull Products / Auto-create Items'."
 		)
 
 	if not items:

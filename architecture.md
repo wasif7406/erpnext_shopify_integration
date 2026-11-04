@@ -105,7 +105,8 @@ Direction and features:
 | `enable_shopify_to_erpnext` | **off** |
 | `enable_erpnext_to_shopify` | **off** |
 | `dry_run` | off |
-| `pull_orders` / `pull_customers` / `pull_products` | on (only relevant when the pull master is on) |
+| `pull_orders` / `pull_customers` | on (only relevant when the pull master is on) |
+| `pull_products` | **off** — explicit `Shopify Item Map` only; on = auto-create Items |
 | `create_sales_invoice` / `create_delivery_note` / `cancel_sales_order` | **off** |
 | `push_items` / `push_item_updates` / `push_variants` / `push_inventory` | **off** |
 | `order_sync_lookback_days` | 3 |
@@ -193,7 +194,10 @@ Fallbacks never cross a company boundary.
 2. resolve company;
 3. ensure customer (create/update + addresses + contact) if `pull_customers`,
    else use the mapping / default customer;
-4. ensure items (product fetch once per product id) if `pull_products`;
+4. ensure items: `Shopify Item Map` is authoritative. When `pull_products`
+   is off (default), an order containing an unmapped product is **skipped**
+   as a whole; nothing is auto-created. When it is on, missing products are
+   fetched once and Items are created;
 5. build the Sales Order: net rates (discounts and included tax removed),
    `Actual` tax rows from the store/company mapping, dummy price list and tax
    category, currency conversion when needed;

@@ -48,7 +48,7 @@ installing the app cannot create or change an order until you say so.
 | Pull orders (`orders/create`) | `order.import_order` | `Enable Shopify → ERPNext` + `Pull Orders` |
 | Pull old orders by date range | `sync_old_orders` (flag or API) | `Sync Old Orders` |
 | Customers + addresses + contact | `customer.ensure_customer` | `Pull Customers` |
-| Auto-create items from products/order lines | `product.ensure_items` / `sync_product` | `Pull Products` |
+| Items from products/order lines | `product.ensure_items` / `sync_product` | `Pull Products` (off by default — explicit `Shopify Item Map` only) |
 | Tax title → account mapping | `Shopify Store Tax` rows + defaults | — |
 | Shipping as tax row or item | `add_shipping_as_item` + `shipping_item` | — |
 | Consolidate tax rows | `consolidate_taxes` | — |
@@ -145,6 +145,25 @@ Each company row also carries its own:
 * `Create Payment Entry when Paid`;
 * invoice posting date basis (`Order Date`, `Paid Date`, `Today`).
 
+### 3.2.1 Item mapping — only the products you list
+
+`Pull Products / Auto-create Items` is **off by default**. In that mode the app
+never invents an ERPNext Item: every Shopify product you want to sell must be
+listed once in **Shopify Item Map** (`Shopify Store → Add Item Mapping`).
+
+A mapping row needs the ERPNext Item plus one of:
+
+- **Shopify SKU** (easiest), or
+- **Shopify Product ID + Variant ID** (needed when the SKU is blank).
+
+If an order contains **any** product without a mapping, the whole order is
+**skipped** (nothing is created) and the reason is written to the Sync Run /
+Webhook Log. This is what makes it safe to run test products in Shopify
+without polluting the ERPNext catalogue.
+
+Turning `Pull Products` on restores the old behaviour: missing products are
+fetched from Shopify and Items are created automatically.
+
 ### 3.3 Warehouses and taxes
 
 * **Warehouse mapping**: `Shopify Location ID → Warehouse`, per company.
@@ -161,7 +180,7 @@ Each company row also carries its own:
 Enable Shopify → ERPNext          [ ]   # pull master
   Pull Orders                     [x]
   Pull Customers                  [x]
-  Pull Products                   [x]
+  Pull Products                   [ ]   # explicit item map only
   Create Sales Invoice when Paid  [ ]
   Create Delivery Note            [ ]
   Cancel Sales Order              [ ]

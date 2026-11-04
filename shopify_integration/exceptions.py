@@ -34,6 +34,10 @@ class ShopifyBudgetExhausted(ShopifyIntegrationError):
 	"""The per-run request budget was spent; the run stops cleanly."""
 
 
+class ShopifyUnmappedProduct(ShopifyIntegrationError):
+	"""An order contains a product that has no explicit `Shopify Item Map`."""
+
+
 class ShopifyDuplicateDocument(ShopifyIntegrationError):
 	"""Another run already created the document this run wanted to create."""
 

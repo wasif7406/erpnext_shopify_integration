@@ -163,6 +163,11 @@ frappe.ui.form.on("Shopify Store Tax", {
 function bind_actions(frm) {
 	if (frm.__shopify_buttons_added) return;
 	frm.__shopify_buttons_added = true;
+	frm.add_custom_button(__("Add Item Mapping"), () => add_item_mapping(frm));
+	frm.add_custom_button(__("View Item Mappings"), () => {
+		frappe.route_options = { store: frm.doc.name };
+		frappe.set_route("List", "Shopify Item Map");
+	});
 	frm.add_custom_button(__("Show Webhook URL"), () => {
 		if (!frm.doc.name) return;
 		frappe.call({
@@ -212,6 +217,68 @@ function set_filters(frm) {
 		const row = locals[cdt][cdn] || {};
 		return { filters: { company: row.company, is_group: 0 } };
 	});
+}
+
+function add_item_mapping(frm) {
+	if (frm.is_new()) {
+		frappe.msgprint(__("Save the store first."));
+		return;
+	}
+	const dialog = new frappe.ui.Dialog({
+		title: __("Map a Shopify product to an ERPNext Item"),
+		fields: [
+			{
+				fieldname: "item_code",
+				fieldtype: "Link",
+				options: "Item",
+				label: __("ERPNext Item"),
+				reqd: 1,
+			},
+			{
+				fieldname: "sku",
+				fieldtype: "Data",
+				label: __("Shopify SKU"),
+				description: __("Usually the simplest key: the SKU on the Shopify order line."),
+			},
+			{
+				fieldname: "product_id",
+				fieldtype: "Data",
+				label: __("Shopify Product ID"),
+			},
+			{
+				fieldname: "variant_id",
+				fieldtype: "Data",
+				label: __("Shopify Variant ID"),
+			},
+		],
+		primary_action_label: __("Add Mapping"),
+		primary_action(values) {
+			if (!values.sku && !values.product_id && !values.variant_id) {
+				frappe.msgprint(__("Enter at least a SKU, a product ID or a variant ID."));
+				return;
+			}
+			frappe.call({
+				method: "frappe.client.insert",
+				args: {
+					doc: Object.assign(
+						{ doctype: "Shopify Item Map", store: frm.doc.name },
+						values
+					),
+				},
+				freeze: true,
+				callback: (r) => {
+					if (!r.exc) {
+						dialog.hide();
+						frappe.show_alert({
+							message: __("Item mapping added."),
+							indicator: "green",
+						});
+					}
+				},
+			});
+		},
+	});
+	dialog.show();
 }
 
 function run_now(frm, mode) {

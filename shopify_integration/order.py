@@ -25,7 +25,7 @@ from .constants import (
 	STORE_DOCTYPE,
 )
 from .customer import ensure_customer, find_customer
-from .exceptions import ShopifyBudgetExhausted, ShopifyConfigError
+from .exceptions import ShopifyBudgetExhausted, ShopifyConfigError, ShopifyUnmappedProduct
 from .payloads import is_cancelled, is_paid, normalize_datetime
 from .product import ensure_items
 from .taxes import get_dummy_price_list, get_dummy_tax_category, get_order_taxes
@@ -132,7 +132,15 @@ def import_order(cfg: StoreConfig, order: dict, run: Run | None = None, trigger:
 					run.bump("orders_updated")
 				refresh_existing(cfg, existing, order, run=run)
 				return existing, "exists"
-			return _create_sales_order(cfg, order, run=run)
+			try:
+				return _create_sales_order(cfg, order, run=run)
+			except ShopifyUnmappedProduct as exc:
+				# A test/unlisted product: skip the whole order, create nothing.
+				frappe.db.rollback()
+				if run:
+					run.bump("orders_skipped")
+					run.note(f"skipped {order.get('name')}: {exc}")
+				return None, str(exc)
 	except LockTimeoutError:
 		if run:
 			run.bump("orders_skipped")

@@ -255,8 +255,8 @@
    "label": "Pull Customers"
   },
   {
-   "default": "1",
-   "description": "Create ERPNext Items from Shopify products/order lines when they are missing.",
+   "default": "0",
+   "description": "When off (recommended), only products explicitly listed in Shopify Item Map are imported; an order containing any unmapped product is skipped. When on, missing Items are created automatically from Shopify products.",
    "fieldname": "pull_products",
    "fieldtype": "Check",
    "label": "Pull Products / Auto-create Items"
