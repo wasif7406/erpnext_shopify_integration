@@ -1,0 +1,218 @@
+{
+ "actions": [],
+ "autoname": "format:SHOPRUN-{YYYY}-{#####}",
+ "creation": "2026-11-04 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "store",
+  "mode",
+  "trigger",
+  "status",
+  "column_break_1",
+  "started_on",
+  "finished_on",
+  "requests_made",
+  "budget_exhausted",
+  "section_break_counts",
+  "orders_seen",
+  "orders_created",
+  "orders_updated",
+  "orders_skipped",
+  "customers_created",
+  "customers_updated",
+  "items_created",
+  "invoices_created",
+  "delivery_notes_created",
+  "payments_created",
+  "cancelled",
+  "inventory_pushed",
+  "items_pushed",
+  "section_break_note",
+  "note",
+  "failures"
+ ],
+ "fields": [
+  {
+   "fieldname": "store",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Store",
+   "options": "Shopify Store",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Mode",
+   "options": "Orders\nInvoices\nDelivery Notes\nCancellations\nOld Orders\nInventory\nItems\nFull",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trigger",
+   "fieldtype": "Select",
+   "label": "Trigger",
+   "options": "Scheduler\nWebhook\nManual\nHook"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Running\nSuccess\nPartial\nFailed\nSkipped"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "label": "Started On"
+  },
+  {
+   "fieldname": "finished_on",
+   "fieldtype": "Datetime",
+   "label": "Finished On"
+  },
+  {
+   "fieldname": "requests_made",
+   "fieldtype": "Int",
+   "label": "Requests Made",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "budget_exhausted",
+   "fieldtype": "Check",
+   "label": "Request Budget Exhausted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_counts",
+   "fieldtype": "Section Break",
+   "label": "Counters"
+  },
+  {
+   "fieldname": "orders_seen",
+   "fieldtype": "Int",
+   "label": "Orders Seen"
+  },
+  {
+   "fieldname": "orders_created",
+   "fieldtype": "Int",
+   "label": "Orders Created"
+  },
+  {
+   "fieldname": "orders_updated",
+   "fieldtype": "Int",
+   "label": "Orders Updated"
+  },
+  {
+   "fieldname": "orders_skipped",
+   "fieldtype": "Int",
+   "label": "Orders Skipped"
+  },
+  {
+   "fieldname": "customers_created",
+   "fieldtype": "Int",
+   "label": "Customers Created"
+  },
+  {
+   "fieldname": "customers_updated",
+   "fieldtype": "Int",
+   "label": "Customers Updated"
+  },
+  {
+   "fieldname": "items_created",
+   "fieldtype": "Int",
+   "label": "Items Created"
+  },
+  {
+   "fieldname": "invoices_created",
+   "fieldtype": "Int",
+   "label": "Invoices Created"
+  },
+  {
+   "fieldname": "delivery_notes_created",
+   "fieldtype": "Int",
+   "label": "Delivery Notes Created"
+  },
+  {
+   "fieldname": "payments_created",
+   "fieldtype": "Int",
+   "label": "Payments Created"
+  },
+  {
+   "fieldname": "cancelled",
+   "fieldtype": "Int",
+   "label": "Cancelled"
+  },
+  {
+   "fieldname": "inventory_pushed",
+   "fieldtype": "Int",
+   "label": "Inventory Pushed"
+  },
+  {
+   "fieldname": "items_pushed",
+   "fieldtype": "Int",
+   "label": "Items Pushed"
+  },
+  {
+   "fieldname": "section_break_note",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  },
+  {
+   "fieldname": "failures",
+   "fieldtype": "Table",
+   "label": "Failures",
+   "options": "Shopify Sync Failure"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Shopify Integration",
+ "name": "Shopify Sync Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "store,mode,status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

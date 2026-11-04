@@ -1,0 +1,599 @@
+{
+ "actions": [],
+ "autoname": "format:SHOP-{####}",
+ "creation": "2026-11-04 10:00:00.000000",
+ "description": "One Shopify shop (its own token and webhooks) and the ERPNext companies it serves. A store may serve several companies; each company row decides its own accounts, warehouse and naming series.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "store_name",
+  "shop_domain",
+  "enabled",
+  "column_break_head",
+  "authentication_method",
+  "api_version",
+  "section_break_auth",
+  "access_token",
+  "shared_secret",
+  "webhook_secret",
+  "column_break_auth",
+  "client_id",
+  "client_secret",
+  "oauth_access_token",
+  "token_expires_at",
+  "last_connection_on",
+  "last_connection_status",
+  "section_break_direction",
+  "enable_shopify_to_erpnext",
+  "column_break_direction",
+  "enable_erpnext_to_shopify",
+  "dry_run",
+  "section_break_pull",
+  "pull_orders",
+  "pull_customers",
+  "pull_products",
+  "create_sales_invoice",
+  "create_delivery_note",
+  "cancel_sales_order",
+  "column_break_pull",
+  "order_sync_lookback_days",
+  "pull_order_from",
+  "last_order_sync_on",
+  "last_run_on",
+  "last_run_result",
+  "section_break_push",
+  "push_items",
+  "push_item_updates",
+  "push_variants",
+  "push_new_item_as_active",
+  "push_fulfillment",
+  "column_break_push",
+  "push_inventory",
+  "inventory_sync_frequency",
+  "last_inventory_push_on",
+  "section_break_order_defaults",
+  "add_shipping_as_item",
+  "shipping_item",
+  "column_break_order_defaults",
+  "consolidate_taxes",
+  "section_break_companies",
+  "companies",
+  "section_break_warehouses",
+  "fetch_locations",
+  "warehouse_mapping",
+  "section_break_taxes",
+  "taxes",
+  "section_break_webhooks",
+  "webhook_key",
+  "webhook_url",
+  "last_webhook_on",
+  "register_webhooks",
+  "webhooks",
+  "section_break_oldsync",
+  "sync_old_orders",
+  "old_orders_from",
+  "old_orders_to",
+  "section_break_advanced",
+  "request_delay_seconds",
+  "run_request_budget",
+  "digest_recipients",
+  "notes",
+  "section_break_actions",
+  "test_connection",
+  "sync_orders_now",
+  "push_inventory_now"
+ ],
+ "fields": [
+  {
+   "fieldname": "store_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Store Name",
+   "reqd": 1
+  },
+  {
+   "description": "The shop's myshopify.com hostname, e.g. valuemart-9159.myshopify.com",
+   "fieldname": "shop_domain",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Shop Domain",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Static Token",
+   "fieldname": "authentication_method",
+   "fieldtype": "Select",
+   "label": "Authentication Method",
+   "options": "Static Token\nOAuth 2.0 Client Credentials"
+  },
+  {
+   "default": "2025-10",
+   "description": "Shopify Admin API version. Shopify supports each version for 12 months; keep this on a version the shop accepts.",
+   "fieldname": "api_version",
+   "fieldtype": "Select",
+   "label": "API Version",
+   "options": "2024-10\n2025-01\n2025-04\n2025-07\n2025-10\n2026-01\n2026-04\n2026-07\n2026-10"
+  },
+  {
+   "fieldname": "section_break_auth",
+   "fieldtype": "Section Break",
+   "label": "Authentication"
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='Static Token'",
+   "description": "Admin API access token of the custom app (shpat_...).",
+   "fieldname": "access_token",
+   "fieldtype": "Password",
+   "label": "Access Token",
+   "length": 1000
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='Static Token'",
+   "description": "The app's API secret key. Used to verify webhook signatures (X-Shopify-Hmac-Sha256).",
+   "fieldname": "shared_secret",
+   "fieldtype": "Password",
+   "label": "Shared Secret / API Secret",
+   "length": 1000
+  },
+  {
+   "description": "Optional override of the HMAC secret. Leave empty to use Shared Secret (static token) or Client Secret (OAuth).",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Secret Override",
+   "length": 1000
+  },
+  {
+   "fieldname": "column_break_auth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='OAuth 2.0 Client Credentials'",
+   "description": "Client ID from the Shopify Dev Dashboard. Client credentials work only when the app and shop belong to the same Shopify organization.",
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID"
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='OAuth 2.0 Client Credentials'",
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "length": 1000
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='OAuth 2.0 Client Credentials'",
+   "fieldname": "oauth_access_token",
+   "fieldtype": "Password",
+   "hidden": 1,
+   "label": "OAuth Access Token",
+   "length": 1000,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.authentication_method=='OAuth 2.0 Client Credentials'",
+   "fieldname": "token_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Token Expires At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_connection_on",
+   "fieldtype": "Datetime",
+   "label": "Last Connection Test",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_connection_status",
+   "fieldtype": "Small Text",
+   "label": "Last Connection Result",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_direction",
+   "fieldtype": "Section Break",
+   "label": "Sync Direction"
+  },
+  {
+   "default": "0",
+   "description": "Master switch for Shopify -> ERPNext. Off by default: nothing is pulled until this is checked.",
+   "fieldname": "enable_shopify_to_erpnext",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enable Shopify to ERPNext"
+  },
+  {
+   "fieldname": "column_break_direction",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Master switch for ERPNext -> Shopify. Off by default: no item or stock is pushed until this is checked.",
+   "fieldname": "enable_erpnext_to_shopify",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enable ERPNext to Shopify"
+  },
+  {
+   "default": "0",
+   "description": "Shadow mode: log what would be imported/pushed, create nothing.",
+   "fieldname": "dry_run",
+   "fieldtype": "Check",
+   "label": "Dry Run"
+  },
+  {
+   "fieldname": "section_break_pull",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:doc.enable_shopify_to_erpnext==1",
+   "label": "Shopify -> ERPNext"
+  },
+  {
+   "default": "1",
+   "fieldname": "pull_orders",
+   "fieldtype": "Check",
+   "label": "Pull Orders (Sales Orders)"
+  },
+  {
+   "default": "1",
+   "description": "Create/update Customer, Address and Contact records.",
+   "fieldname": "pull_customers",
+   "fieldtype": "Check",
+   "label": "Pull Customers"
+  },
+  {
+   "default": "1",
+   "description": "Create ERPNext Items from Shopify products/order lines when they are missing.",
+   "fieldname": "pull_products",
+   "fieldtype": "Check",
+   "label": "Pull Products / Auto-create Items"
+  },
+  {
+   "default": "0",
+   "description": "Create a Sales Invoice on orders/paid and on import when the order is paid.",
+   "fieldname": "create_sales_invoice",
+   "fieldtype": "Check",
+   "label": "Create Sales Invoice when Paid"
+  },
+  {
+   "default": "0",
+   "description": "Create one Delivery Note per Shopify fulfillment.",
+   "fieldname": "create_delivery_note",
+   "fieldtype": "Check",
+   "label": "Create Delivery Note on Fulfillment"
+  },
+  {
+   "default": "0",
+   "description": "Cancel the Sales Order when Shopify cancels it, but only if no invoice and no delivery note exist.",
+   "fieldname": "cancel_sales_order",
+   "fieldtype": "Check",
+   "label": "Cancel Sales Order from Shopify"
+  },
+  {
+   "fieldname": "column_break_pull",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3",
+   "description": "On the first poll, how many days back to look. Webhooks cover the rest; this only catches missed events.",
+   "fieldname": "order_sync_lookback_days",
+   "fieldtype": "Int",
+   "label": "Poll Lookback (days)"
+  },
+  {
+   "description": "Never import orders created before this date. Empty = no limit.",
+   "fieldname": "pull_order_from",
+   "fieldtype": "Date",
+   "label": "Pull Orders From"
+  },
+  {
+   "fieldname": "last_order_sync_on",
+   "fieldtype": "Datetime",
+   "label": "Last Order Poll",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_run_on",
+   "fieldtype": "Datetime",
+   "label": "Last Run On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_run_result",
+   "fieldtype": "Small Text",
+   "label": "Last Run Result",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_push",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:doc.enable_erpnext_to_shopify==1",
+   "label": "ERPNext -> Shopify"
+  },
+  {
+   "default": "0",
+   "description": "Upload new ERPNext items to Shopify when they are created.",
+   "fieldname": "push_items",
+   "fieldtype": "Check",
+   "label": "Push New Items"
+  },
+  {
+   "default": "0",
+   "depends_on": "push_items",
+   "description": "Update the Shopify product when an ERPNext item changes.",
+   "fieldname": "push_item_updates",
+   "fieldtype": "Check",
+   "label": "Push Item Updates"
+  },
+  {
+   "default": "0",
+   "depends_on": "push_items",
+   "description": "Push template + variant items as Shopify product variants.",
+   "fieldname": "push_variants",
+   "fieldtype": "Check",
+   "label": "Push Variants"
+  },
+  {
+   "default": "0",
+   "depends_on": "push_items",
+   "fieldname": "push_new_item_as_active",
+   "fieldtype": "Check",
+   "label": "New Items as Active"
+  },
+  {
+   "default": "0",
+   "description": "Mark the Shopify order fulfilled when an ERPNext Delivery Note is submitted. Off by default: Shopify then decrements its own inventory.",
+   "fieldname": "push_fulfillment",
+   "fieldtype": "Check",
+   "label": "Push Fulfillment from Delivery Note"
+  },
+  {
+   "fieldname": "column_break_push",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Push ERPNext stock levels to the mapped Shopify locations.",
+   "fieldname": "push_inventory",
+   "fieldtype": "Check",
+   "label": "Push Inventory"
+  },
+  {
+   "default": "60",
+   "depends_on": "push_inventory",
+   "fieldname": "inventory_sync_frequency",
+   "fieldtype": "Select",
+   "label": "Inventory Sync Frequency (minutes)",
+   "options": "5\n10\n15\n30\n60"
+  },
+  {
+   "fieldname": "last_inventory_push_on",
+   "fieldtype": "Datetime",
+   "label": "Last Inventory Push",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_order_defaults",
+   "fieldtype": "Section Break",
+   "label": "Order Defaults"
+  },
+  {
+   "default": "0",
+   "description": "Add Shopify shipping as a normal item instead of a tax/charges row.",
+   "fieldname": "add_shipping_as_item",
+   "fieldtype": "Check",
+   "label": "Add Shipping as an Item"
+  },
+  {
+   "depends_on": "add_shipping_as_item",
+   "fieldname": "shipping_item",
+   "fieldtype": "Link",
+   "label": "Shipping Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "column_break_order_defaults",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "One tax row per account head instead of one per Shopify tax line.",
+   "fieldname": "consolidate_taxes",
+   "fieldtype": "Check",
+   "label": "Consolidate Taxes"
+  },
+  {
+   "fieldname": "section_break_companies",
+   "fieldtype": "Section Break",
+   "label": "Companies"
+  },
+  {
+   "description": "One row per ERPNext company this store may post to. With several rows, the routing field decides which company owns an order; exactly one row must be the default.",
+   "fieldname": "companies",
+   "fieldtype": "Table",
+   "label": "Companies",
+   "options": "Shopify Store Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_warehouses",
+   "fieldtype": "Section Break",
+   "label": "Warehouse / Location Mapping"
+  },
+  {
+   "fieldname": "fetch_locations",
+   "fieldtype": "Button",
+   "label": "Fetch Shopify Locations"
+  },
+  {
+   "fieldname": "warehouse_mapping",
+   "fieldtype": "Table",
+   "label": "Warehouse Mapping",
+   "options": "Shopify Store Warehouse"
+  },
+  {
+   "fieldname": "section_break_taxes",
+   "fieldtype": "Section Break",
+   "label": "Tax Account Mapping"
+  },
+  {
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Tax Accounts",
+   "options": "Shopify Store Tax"
+  },
+  {
+   "fieldname": "section_break_webhooks",
+   "fieldtype": "Section Break",
+   "label": "Webhooks"
+  },
+  {
+   "description": "Part of the callback URL. Rotating it invalidates the registered webhooks.",
+   "fieldname": "webhook_key",
+   "fieldtype": "Data",
+   "label": "Webhook Key",
+   "read_only": 1
+  },
+  {
+   "description": "Register this address in Shopify (the Register Webhooks button does it through the API).",
+   "fieldname": "webhook_url",
+   "fieldtype": "Data",
+   "label": "Webhook URL",
+   "length": 500,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_webhook_on",
+   "fieldtype": "Datetime",
+   "label": "Last Webhook On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "register_webhooks",
+   "fieldtype": "Button",
+   "label": "Register Webhooks"
+  },
+  {
+   "fieldname": "webhooks",
+   "fieldtype": "Table",
+   "label": "Registered Webhooks",
+   "options": "Shopify Store Webhook",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_oldsync",
+   "fieldtype": "Section Break",
+   "label": "Backfill Old Orders"
+  },
+  {
+   "default": "0",
+   "description": "One-shot flag: importing a date range is finished by the scheduler and the flag is cleared.",
+   "fieldname": "sync_old_orders",
+   "fieldtype": "Check",
+   "label": "Sync Old Orders"
+  },
+  {
+   "depends_on": "sync_old_orders",
+   "fieldname": "old_orders_from",
+   "fieldtype": "Datetime",
+   "label": "From"
+  },
+  {
+   "depends_on": "sync_old_orders",
+   "fieldname": "old_orders_to",
+   "fieldtype": "Datetime",
+   "label": "To"
+  },
+  {
+   "fieldname": "section_break_advanced",
+   "fieldtype": "Section Break",
+   "label": "Advanced"
+  },
+  {
+   "default": "0.5",
+   "description": "Minimum seconds between HTTP requests (floor 0.25). Shopify's REST bucket is about 2 requests/second.",
+   "fieldname": "request_delay_seconds",
+   "fieldtype": "Float",
+   "label": "Request Delay (seconds)"
+  },
+  {
+   "default": "800",
+   "description": "Hard cap on API calls per run. A run that hits it stops cleanly and continues next tick.",
+   "fieldname": "run_request_budget",
+   "fieldtype": "Int",
+   "label": "Requests Per Run"
+  },
+  {
+   "description": "Comma-separated emails for the daily digest. Empty = desk notification only.",
+   "fieldname": "digest_recipients",
+   "fieldtype": "Small Text",
+   "label": "Daily Digest Recipients"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "section_break_actions",
+   "fieldtype": "Section Break",
+   "label": "Actions"
+  },
+  {
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "sync_orders_now",
+   "fieldtype": "Button",
+   "label": "Poll Orders Now"
+  },
+  {
+   "fieldname": "push_inventory_now",
+   "fieldtype": "Button",
+   "label": "Push Inventory Now"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Shopify Integration",
+ "name": "Shopify Store",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "store_name,shop_domain",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "store_name",
+ "track_changes": 1
+}

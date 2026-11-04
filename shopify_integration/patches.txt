@@ -1,0 +1,7 @@
+[pre_model_sync]
+# Patches added in this section will be executed before doctypes are migrated
+# (none yet)
+
+[post_model_sync]
+# Patches added in this section will be executed after doctypes are migrated
+shopify_integration.patches.v0_1.ensure_custom_fields

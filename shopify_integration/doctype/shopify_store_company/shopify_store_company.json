@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "creation": "2026-11-04 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "is_default",
+  "enabled",
+  "column_break_1",
+  "route_field",
+  "route_value",
+  "section_break_people",
+  "customer_group",
+  "default_customer",
+  "column_break_2",
+  "section_break_accounting",
+  "default_warehouse",
+  "cost_center",
+  "cash_bank_account",
+  "section_break_series",
+  "sales_order_series",
+  "delivery_note_series",
+  "sales_invoice_series",
+  "section_break_tax",
+  "default_sales_tax_account",
+  "default_shipping_charges_account",
+  "section_break_behaviour",
+  "create_payment_entry",
+  "invoice_posting_date_basis"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Any",
+   "description": "How an order is routed to this company when the store serves several.",
+   "fieldname": "route_field",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Route Field",
+   "options": "Any\nSource Name\nCurrency\nShipping Country\nOrder Tag\nApp ID"
+  },
+  {
+   "depends_on": "eval:doc.route_field!='Any'",
+   "description": "Case-insensitive value to match, e.g. 'pos', 'PKR', 'Pakistan', 'wholesale'.",
+   "fieldname": "route_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Route Value"
+  },
+  {
+   "fieldname": "section_break_people",
+   "fieldtype": "Section Break",
+   "label": "Customer Defaults"
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Link",
+   "label": "Customer Group",
+   "options": "Customer Group"
+  },
+  {
+   "description": "Used when a Shopify order has no customer and Pull Customers is off.",
+   "fieldname": "default_customer",
+   "fieldtype": "Link",
+   "label": "Default Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_accounting",
+   "fieldtype": "Section Break",
+   "label": "Accounting Defaults"
+  },
+  {
+   "description": "Used when a Shopify location is not mapped below.",
+   "fieldname": "default_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "description": "Payment Entry (paid Shopify order) is booked into this account.",
+   "fieldname": "cash_bank_account",
+   "fieldtype": "Link",
+   "label": "Cash / Bank Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "section_break_series",
+   "fieldtype": "Section Break",
+   "label": "Naming Series"
+  },
+  {
+   "fieldname": "sales_order_series",
+   "fieldtype": "Data",
+   "label": "Sales Order Series",
+   "description": "Naming series pattern, e.g. SAL-ORD-.YYYY.- (leave empty for ERPNext default)."
+  },
+  {
+   "fieldname": "delivery_note_series",
+   "fieldtype": "Data",
+   "label": "Delivery Note Series",
+   "description": "Naming series pattern, e.g. SAL-ORD-.YYYY.- (leave empty for ERPNext default)."
+  },
+  {
+   "fieldname": "sales_invoice_series",
+   "fieldtype": "Data",
+   "label": "Sales Invoice Series",
+   "description": "Naming series pattern, e.g. SAL-ORD-.YYYY.- (leave empty for ERPNext default)."
+  },
+  {
+   "fieldname": "section_break_tax",
+   "fieldtype": "Section Break",
+   "label": "Tax Defaults"
+  },
+  {
+   "description": "Used when a Shopify tax title has no row in Tax Accounts.",
+   "fieldname": "default_sales_tax_account",
+   "fieldtype": "Link",
+   "label": "Default Sales Tax Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "default_shipping_charges_account",
+   "fieldtype": "Link",
+   "label": "Default Shipping Charges Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "section_break_behaviour",
+   "fieldtype": "Section Break",
+   "label": "Behaviour"
+  },
+  {
+   "default": "1",
+   "description": "Record the money Shopify collected as a Payment Entry against the Sales Invoice.",
+   "fieldname": "create_payment_entry",
+   "fieldtype": "Check",
+   "label": "Create Payment Entry when Paid"
+  },
+  {
+   "default": "Order Date",
+   "fieldname": "invoice_posting_date_basis",
+   "fieldtype": "Select",
+   "label": "Invoice Posting Date",
+   "options": "Order Date\nPaid Date\nToday"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-04 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Shopify Integration",
+ "name": "Shopify Store Company",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "autoname": "format:SHOPITEM-{#####}",
+ "creation": "2026-11-04 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "store",
+  "item_code",
+  "product_id",
+  "variant_id",
+  "sku",
+  "column_break_1",
+  "has_variants",
+  "variant_of",
+  "inventory_item_id",
+  "item_synced_on",
+  "inventory_synced_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "store",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Store",
+   "options": "Shopify Store",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "ERPNext Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "product_id",
+   "fieldtype": "Data",
+   "label": "Shopify Product ID",
+   "search_index": 1
+  },
+  {
+   "fieldname": "variant_id",
+   "fieldtype": "Data",
+   "label": "Shopify Variant ID",
+   "search_index": 1
+  },
+  {
+   "fieldname": "sku",
+   "fieldtype": "Data",
+   "label": "Shopify SKU"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "has_variants",
+   "fieldtype": "Check",
+   "label": "Template Item"
+  },
+  {
+   "fieldname": "variant_of",
+   "fieldtype": "Link",
+   "label": "Variant Of",
+   "options": "Item"
+  },
+  {
+   "description": "Shopify inventory_item_id, needed for inventory_levels/set.",
+   "fieldname": "inventory_item_id",
+   "fieldtype": "Data",
+   "label": "Inventory Item ID"
+  },
+  {
+   "fieldname": "item_synced_on",
+   "fieldtype": "Datetime",
+   "label": "Item Synced On"
+  },
+  {
+   "description": "Last time this item/location pair was pushed. Only newer Bin changes are pushed.",
+   "fieldname": "inventory_synced_on",
+   "fieldtype": "Datetime",
+   "label": "Inventory Synced On"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-04 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Shopify Integration",
+ "name": "Shopify Item Map",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager"
+  }
+ ],
+ "quick_entry": 0,
+ "search_fields": "item_code,product_id,variant_id,sku",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
