@@ -19,24 +19,106 @@ from .utils import normalize_phone
 # ---------------------------------------------------------------------------
 # Lookup
 # ---------------------------------------------------------------------------
-def find_customer(cfg: StoreConfig, shopify_customer_id):
-	if not shopify_customer_id:
-		return None
-	name = frappe.db.get_value(
-		CUSTOMER_MAP_DOCTYPE,
-		{"store": cfg.name, "shopify_customer_id": str(shopify_customer_id)},
-		"customer",
-	)
-	if name:
-		return frappe.get_doc("Customer", name)
-
-	# Backward compatibility with rows created by the legacy connector.
-	if legacy_store_name() == cfg.name:
-		name = frappe.db.get_value("Customer", {CUSTOMER_ID_FIELD: str(shopify_customer_id)}, "name")
+def find_customer(cfg: StoreConfig, shopify_customer_id, payload: dict | None = None):
+	if shopify_customer_id:
+		name = frappe.db.get_value(
+			CUSTOMER_MAP_DOCTYPE,
+			{"store": cfg.name, "shopify_customer_id": str(shopify_customer_id)},
+			"customer",
+		)
 		if name:
-			_remember_customer(cfg, shopify_customer_id, name)
 			return frappe.get_doc("Customer", name)
+
+		# Backward compatibility with rows created by the legacy connector.
+		if legacy_store_name() == cfg.name:
+			name = frappe.db.get_value("Customer", {CUSTOMER_ID_FIELD: str(shopify_customer_id)}, "name")
+			if name:
+				_remember_customer(cfg, shopify_customer_id, name)
+				return frappe.get_doc("Customer", name)
+
+	# The historical import created ~1,100 customers without a Shopify id, so a
+	# Shopify id alone is not enough: match the same person by email, then
+	# phone, then (only when there is no email/phone) an exact name.
+	if payload:
+		return _find_by_identity(cfg, shopify_customer_id, payload)
 	return None
+
+
+def _find_by_identity(cfg: StoreConfig, shopify_customer_id, payload: dict):
+	email = (payload.get("email") or "").strip().lower()
+	phone = normalize_phone(payload.get("phone") or (payload.get("default_address") or {}).get("phone"))
+	name = " ".join(
+		part for part in ((payload.get("first_name") or "").strip(), (payload.get("last_name") or "").strip()) if part
+	).strip()
+
+	candidate = None
+	if email:
+		candidate = frappe.db.get_value("Customer", {"email_id": email}, "name", order_by="creation asc")
+		if not candidate:
+			candidate = _customer_from_contact_email(email)
+
+	if not candidate and phone:
+		last10 = phone[-10:]
+		rows = frappe.db.sql(
+			"""
+			select name from `tabCustomer`
+			where right(regexp_replace(ifnull(mobile_no, ''), '[^0-9]', ''), 10) = %s
+			order by creation asc
+			limit 1
+			""",
+			(last10,),
+		)
+		candidate = rows[0][0] if rows else None
+		if not candidate:
+			candidate = _customer_from_contact_phone(last10)
+
+	if not candidate and name and not email and not phone:
+		rows = frappe.get_all("Customer", filters={"customer_name": name}, pluck="name", limit=2)
+		if len(rows) == 1:
+			candidate = rows[0]
+
+	if not candidate:
+		return None
+
+	_remember_customer(cfg, shopify_customer_id, candidate) if shopify_customer_id else None
+	if shopify_customer_id:
+		current = frappe.db.get_value("Customer", candidate, CUSTOMER_ID_FIELD)
+		if not current:
+			frappe.db.set_value(
+				"Customer", candidate, CUSTOMER_ID_FIELD, str(shopify_customer_id), update_modified=False
+			)
+	return frappe.get_doc("Customer", candidate)
+
+
+def _customer_from_contact_email(email: str):
+	rows = frappe.db.sql(
+		"""
+		select dl.link_name
+		from `tabContact Email` ce
+		join `tabDynamic Link` dl on dl.parent = ce.parent and dl.parenttype = 'Contact'
+		where ce.email_id = %s and dl.link_doctype = 'Customer'
+		order by dl.creation asc
+		limit 1
+		""",
+		(email,),
+	)
+	return rows[0][0] if rows else None
+
+
+def _customer_from_contact_phone(last10: str):
+	rows = frappe.db.sql(
+		"""
+		select dl.link_name
+		from `tabContact Phone` cp
+		join `tabDynamic Link` dl on dl.parent = cp.parent and dl.parenttype = 'Contact'
+		where right(regexp_replace(ifnull(cp.phone, ''), '[^0-9]', ''), 10) = %s
+		  and dl.link_doctype = 'Customer'
+		order by dl.creation asc
+		limit 1
+		""",
+		(last10,),
+	)
+	return rows[0][0] if rows else None
 
 
 def _remember_customer(cfg: StoreConfig, shopify_customer_id, customer):
@@ -80,7 +162,7 @@ def ensure_customer(cfg: StoreConfig, company_cfg, order: dict, run=None):
 
 
 def _ensure_customer_locked(cfg, company_cfg, order, customer_payload, shopify_customer_id, run=None):
-	existing = find_customer(cfg, shopify_customer_id)
+	existing = find_customer(cfg, shopify_customer_id, payload=customer_payload)
 
 	if existing:
 		if cfg.pull_customers:

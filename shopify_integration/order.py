@@ -418,7 +418,7 @@ def _customer_for_order(cfg: StoreConfig, company_cfg, order, run=None):
 		return ensure_customer(cfg, company_cfg, order, run=run)
 
 	payload = order.get("customer") or {}
-	customer = find_customer(cfg, payload.get("id")) if payload.get("id") else None
+	customer = find_customer(cfg, payload.get("id"), payload=payload)
 	if customer:
 		return customer
 	if company_cfg.default_customer:
