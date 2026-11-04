@@ -95,6 +95,14 @@ def import_order(cfg: StoreConfig, order: dict, run: Run | None = None, trigger:
 		return None, "order pull disabled"
 
 	order_id = str(order["id"])
+
+	# Hard cutoff first: a historical order is neither imported nor refreshed,
+	# even if a late webhook or an updated_at poll still returns it.
+	if cfg.is_historical(order):
+		if run:
+			run.bump("orders_skipped")
+		return None, "before pull cutoff"
+
 	existing = find_sales_order(cfg, order_id)
 	if existing:
 		if run:
@@ -106,13 +114,6 @@ def import_order(cfg: StoreConfig, order: dict, run: Run | None = None, trigger:
 		if run:
 			run.bump("orders_skipped")
 		return None, "cancelled before import"
-
-	pull_from = cfg.store.pull_order_from
-	created = normalize_datetime(order.get("created_at"))
-	if pull_from and created and created.date() < get_datetime(pull_from).date():
-		if run:
-			run.bump("orders_skipped")
-		return None, "older than Pull Orders From"
 
 	if cfg.dry_run:
 		if run:
@@ -257,6 +258,8 @@ def refresh_existing(cfg: StoreConfig, so, order, run=None):
 # ---------------------------------------------------------------------------
 def handle_webhook_order(payload, store=None, request_id=None):
 	cfg = config(store)
+	if cfg.is_historical(payload):
+		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Orders", trigger="Webhook") as run:
 		so, result = import_order(cfg, payload, run=run, trigger="Webhook")
 	return {"order": payload.get("name"), "sales_order": getattr(so, "name", None), "result": result}
@@ -264,6 +267,8 @@ def handle_webhook_order(payload, store=None, request_id=None):
 
 def handle_webhook_cancelled(payload, store=None, request_id=None):
 	cfg = config(store)
+	if cfg.is_historical(payload):
+		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Cancellations", trigger="Webhook") as run:
 		so = find_sales_order(cfg, payload.get("id"))
 		if not so:
@@ -287,12 +292,12 @@ def poll_orders(cfg: StoreConfig, run: Run, lookback_days: int | None = None):
 	client = ShopifyClient(cfg, budget=_budget(run))
 	count = 0
 	completed = True
+	poll_params = {"status": "any", "updated_at_min": _shopify_time(since)}
+	if cfg.pull_orders_since:
+		# Let Shopify do the filtering: no historical order is even returned.
+		poll_params["created_at_min"] = _shopify_time(get_datetime(cfg.pull_orders_since))
 	try:
-		for order in client.paginate(
-			"orders.json",
-			"orders",
-			params={"status": "any", "updated_at_min": _shopify_time(since)},
-		):
+		for order in client.paginate("orders.json", "orders", params=poll_params):
 			count += 1
 			if run:
 				run.bump("orders_seen")

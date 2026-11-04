@@ -162,6 +162,8 @@ def _make_payment_entry(cfg, company_cfg, si, run=None):
 # ---------------------------------------------------------------------------
 def handle_webhook_paid(payload, store=None, request_id=None):
 	cfg = config(store)
+	if cfg.is_historical(payload):
+		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Invoices", trigger="Webhook") as run:
 		so = find_sales_order(cfg, payload.get("id"))
 		if not so:

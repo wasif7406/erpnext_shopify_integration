@@ -331,6 +331,8 @@ def _log_push_run(cfg, dn, fulfillment):
 # ---------------------------------------------------------------------------
 def handle_webhook_fulfilled(payload, store=None, request_id=None):
 	cfg = config(store)
+	if cfg.is_historical(payload):
+		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Delivery Notes", trigger="Webhook") as run:
 		so = find_sales_order(cfg, payload.get("id"))
 		if not so:

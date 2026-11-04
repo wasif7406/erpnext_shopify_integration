@@ -6,7 +6,7 @@ hard-coded: the `Shopify Store Company` / `Shopify Store Tax` /
 """
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, get_datetime
 
 from .constants import (
 	AUTH_METHOD_OAUTH,
@@ -18,6 +18,7 @@ from .constants import (
 	STORE_DOCTYPE,
 )
 from .exceptions import ShopifyAmbiguousCompany, ShopifyConfigError
+from .payloads import normalize_datetime
 from .routing import AmbiguousCompany, UnroutableOrder, resolve_company
 
 
@@ -172,6 +173,8 @@ class StoreConfig:
 
 		self.api_version = (store.api_version or "").strip() or "2025-10"
 		self.shop_domain = normalize_shop_domain(store.shop_domain)
+		self.pull_orders_since = store.get("pull_orders_since") or None
+		self.pull_order_from = store.get("pull_order_from") or None
 		self.request_delay = max(0.25, float(store.request_delay_seconds or 0.5))
 		self.request_budget = min(
 			max(10, cint(store.run_request_budget) or 800),
@@ -192,6 +195,29 @@ class StoreConfig:
 		if not cfg:
 			raise ShopifyConfigError(f"Shopify Store {self.name} is not configured for company {company}.")
 		return cfg
+
+	def is_historical(self, order: dict) -> bool:
+		"""True when an order predates the configured pull cutoff.
+
+		This is checked **before** the existing-order lookup, so a historical
+		order is never imported and never refreshed by a late webhook/poll.
+		"""
+		created = normalize_datetime((order or {}).get("created_at"))
+		if not created:
+			return False
+		if self.pull_orders_since:
+			try:
+				if created < get_datetime(self.pull_orders_since):
+					return True
+			except Exception:
+				pass
+		if self.pull_order_from:
+			try:
+				if created.date() < get_datetime(self.pull_order_from).date():
+					return True
+			except Exception:
+				pass
+		return False
 
 	def resolve_company(self, order: dict) -> CompanyConfig:
 		rows = [

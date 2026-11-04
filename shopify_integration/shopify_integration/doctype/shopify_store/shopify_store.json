@@ -39,6 +39,7 @@
   "column_break_pull",
   "order_sync_lookback_days",
   "pull_order_from",
+  "pull_orders_since",
   "last_order_sync_on",
   "last_run_on",
   "last_run_result",
@@ -565,6 +566,12 @@
    "fieldname": "push_inventory_now",
    "fieldtype": "Button",
    "label": "Push Inventory Now"
+  },
+  {
+   "fieldname": "pull_orders_since",
+   "fieldtype": "Datetime",
+   "label": "Pull Orders Since",
+   "description": "Hard cutoff: orders created before this timestamp are never imported or refreshed. Set it to the moment you enable syncing to pull new orders only."
   }
  ],
  "index_web_pages_for_search": 0,
