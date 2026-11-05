@@ -238,12 +238,14 @@ def log_webhook(store: str, topic: str, payload, status: str, result: str = "", 
 				"doctype": WEBHOOK_LOG_DOCTYPE,
 				"store": store,
 				"topic": topic,
-				"shopify_webhook_id": webhook_id,
+				# NULL (not '') when missing: the unique index on the webhook id
+				# allows many NULLs but would collide on many empty strings.
+				"shopify_webhook_id": (webhook_id or None),
 				"shopify_order_id": str((payload or {}).get("id") or "") or None,
 				"status": status,
 				"result": (result or "")[:1000],
 				"traceback": traceback,
-				"request_data": dump_snippet(payload, 60000),
+				"request_data": dump_snippet(payload, 500000),
 			}
 		)
 		doc.insert(ignore_permissions=True)

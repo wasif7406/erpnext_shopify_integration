@@ -10,8 +10,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shopify_integration.payloads import (
+	clamp_fulfillment_qty,
+	invoice_may_be_created,
 	line_net_rate,
 	normalize_datetime,
+	order_items_changed,
+	retry_delay_minutes,
 	shipping_net_amount,
 	shopify_time,
 	valid_shopify_signature,
@@ -84,3 +88,42 @@ def test_webhook_signature_roundtrip():
 	assert valid_shopify_signature(body, digest, secret)
 	assert not valid_shopify_signature(body, digest, "wrong")
 	assert not valid_shopify_signature(body, "", secret)
+
+
+# ---------------------------------------------------------------------------
+# Sync decisions (the places where a wrong answer costs money or stock)
+# ---------------------------------------------------------------------------
+def test_fulfillment_quantity_is_clamped_to_what_is_pending():
+	# PostEx already delivered 1 of 3; Shopify says it shipped 3.
+	assert clamp_fulfillment_qty(2, 3) == 2
+	# Normal case: Shopify shipped less than the order.
+	assert clamp_fulfillment_qty(3, 1) == 1
+	# Nothing left to deliver.
+	assert clamp_fulfillment_qty(0, 2) == 0
+
+
+def test_retry_backoff_is_exponential_and_capped():
+	assert retry_delay_minutes(1) == 5
+	assert retry_delay_minutes(2) == 10
+	assert retry_delay_minutes(3) == 20
+	# Cap: one day, never longer.
+	assert retry_delay_minutes(20) == 1440
+
+
+def test_skipped_orders_retry_once_a_day():
+	assert retry_delay_minutes(1, skipped=True) == 1440
+	assert retry_delay_minutes(5, skipped=True) == 1440
+
+
+def test_invoice_is_not_created_when_the_order_is_already_billed():
+	assert invoice_may_be_created(0, False) is True
+	assert invoice_may_be_created(0, True) is False
+	assert invoice_may_be_created(100, False) is False
+	assert invoice_may_be_created(40, False) is False
+
+
+def test_order_items_changed_ignores_rounding_noise():
+	base = [("ITEM-A", 1, 1999.0), ("ITEM-B", 2, 1799.1)]
+	assert not order_items_changed(base, list(base))
+	assert order_items_changed(base, [("ITEM-A", 2, 1999.0), ("ITEM-B", 2, 1799.1)])
+	assert order_items_changed(base, [("ITEM-A", 1, 1999.0)])

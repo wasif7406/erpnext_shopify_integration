@@ -12,6 +12,7 @@
   "column_break_1",
   "shopify_webhook_id",
   "shopify_order_id",
+  "attempts",
   "section_break_result",
   "result",
   "traceback",
@@ -86,6 +87,14 @@
    "label": "Request Data",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "default": "0",
+   "label": "Attempts",
+   "read_only": 1,
+   "in_list_view": 1
   }
  ],
  "index_web_pages_for_search": 0,

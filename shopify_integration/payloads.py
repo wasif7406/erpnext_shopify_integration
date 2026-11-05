@@ -13,6 +13,8 @@ import hmac
 import re
 from zoneinfo import ZoneInfo
 
+from .constants import RETRY_BASE_MINUTES, RETRY_MAX_MINUTES, SKIPPED_RETRY_MINUTES
+
 # Shopify timestamps look like `2026-09-27T16:29:59+0500` (no colon in the
 # offset). Frappe's Datetime column wants `2026-09-27 16:29:59`.
 _OFFSET_WITHOUT_COLON = re.compile(r"([+-]\d{2})(\d{2})$")
@@ -155,6 +157,65 @@ def is_paid(order) -> bool:
 
 def is_cancelled(order) -> bool:
 	return bool(order.get("cancelled_at")) or (order.get("financial_status") or "").lower() == "voided"
+
+
+# ---------------------------------------------------------------------------
+# Sync decisions (pure, unit-tested)
+# ---------------------------------------------------------------------------
+def clamp_fulfillment_qty(pending_qty, fulfillment_qty) -> float:
+	"""Quantity one fulfillment may deliver, never more than still pending.
+
+	`make_delivery_note` already puts the pending quantity on the row; Shopify
+	sends what *it* considers shipped. If another system (PostEx) already
+	delivered part of the order, the smaller of the two wins, so a Shopify
+	fulfillment can never over-ship.
+	"""
+	pending = to_float(pending_qty)
+	shipped = to_float(fulfillment_qty)
+	if pending <= 0:
+		return 0.0
+	if shipped <= 0:
+		return pending
+	return round(min(pending, shipped), 6)
+
+
+def retry_delay_minutes(attempts, skipped: bool = False) -> int:
+	"""Backoff for the retry queue: 5, 10, 20, 40, 80 ... capped at a day.
+
+	An order skipped for an unmapped product is retried once a day (the
+	merchant decides when a product becomes sellable), not every few minutes.
+	"""
+	attempt = max(1, int(attempts or 1))
+	if skipped:
+		return SKIPPED_RETRY_MINUTES
+	return min(RETRY_MAX_MINUTES, RETRY_BASE_MINUTES * (2 ** (attempt - 1)))
+
+
+def invoice_may_be_created(per_billed, has_other_invoice: bool) -> bool:
+	"""False when the Sales Order is already invoiced by anyone else.
+
+	PostEx (or a manual invoice) may already have billed the order. Creating a
+	Shopify invoice on top of that would double the revenue and the receivable,
+	so an existing billing wins and the Shopify invoice is skipped.
+	"""
+	if has_other_invoice:
+		return False
+	return to_float(per_billed) <= 0
+
+
+def order_items_changed(current, incoming) -> bool:
+	"""Whether a Shopify edit changed quantities, rates or the item set.
+
+	`current` / `incoming` are iterables of `(item_code, qty, rate)` tuples.
+	Rates are compared at currency precision.
+	"""
+	def normalise(rows):
+		return sorted(
+			(str(code or ""), round(to_float(qty), 6), money(rate))
+			for code, qty, rate in rows
+		)
+
+	return normalise(current) != normalise(incoming)
 
 
 def valid_shopify_signature(body: bytes, signature: str, secret: str) -> bool:

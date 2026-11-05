@@ -216,8 +216,12 @@ def sync_now(store, mode="orders", background=0):
 
 
 @frappe.whitelist()
-def import_order(store, order_id):
-	"""Pull one order by id (the escape hatch for a missed webhook)."""
+def import_order(store, order_id, force=1):
+	"""Pull one order by id (the escape hatch for a missed webhook).
+
+	`force` defaults to 1: a human asked for this order, so the pull cutoff must
+	not silently refuse it. The retry queue passes force=1 for the same reason.
+	"""
 	_check_store_permission(store)
 	from .order import import_order_by_id
 	from .tasks import run_locked
@@ -226,7 +230,29 @@ def import_order(store, order_id):
 	def worker(store_name):
 		cfg = StoreConfig(store_name)
 		with Run(store_name, mode="Orders", trigger="Manual") as run:
-			so, result = import_order_by_id(cfg, order_id, run=run)
+			so, result = import_order_by_id(cfg, order_id, run=run, force=cint(force))
+		return {"sales_order": getattr(so, "name", None), "result": result}
+
+	return run_locked("manual-order", store, worker)
+
+
+@frappe.whitelist()
+def retry_import(store, order_id):
+	"""Re-run one queued import failure immediately (used by the report)."""
+	_check_store_permission(store)
+	from .order import import_order_by_id
+	from .retry import resolve
+	from .tasks import run_locked
+	from .utils import Run
+
+	def worker(store_name):
+		from .config import StoreConfig
+
+		cfg = StoreConfig(store_name)
+		with Run(store_name, mode="Orders", trigger="Retry") as run:
+			so, result = import_order_by_id(cfg, order_id, run=run, force=True)
+			if so:
+				resolve(store_name, order_id, so.name)
 		return {"sales_order": getattr(so, "name", None), "result": result}
 
 	return run_locked("manual-order", store, worker)

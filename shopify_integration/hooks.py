@@ -51,6 +51,12 @@ scheduler_events = {
 	"cron": {
 		"*/15 * * * *": [
 			"shopify_integration.tasks.poll_all_stores",
+			"shopify_integration.tasks.retry_failed_webhooks",
+		],
+		# Failed order imports are replayed with backoff; the row itself decides
+		# whether it is due, so a 10-minute tick is cheap.
+		"*/10 * * * *": [
+			"shopify_integration.tasks.retry_failed_imports",
 		],
 		# Every 5 minutes the task checks each store's own interval (5-60 min).
 		"*/5 * * * *": [

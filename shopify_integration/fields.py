@@ -23,6 +23,7 @@ from .constants import (
 	ORDER_ID_FIELD,
 	ORDER_NUMBER_FIELD,
 	ORDER_STATUS_FIELD,
+	PAYMENT_ENTRY_FIELD,
 	STORE_FIELD,
 )
 
@@ -55,6 +56,7 @@ SALES_ORDER_FIELDS = [
 	},
 	{
 		"fieldname": STORE_FIELD,
+		"allow_on_submit": 1,
 		"label": "Shopify Store",
 		"fieldtype": "Link",
 		"options": "Shopify Store",
@@ -102,6 +104,7 @@ SALES_INVOICE_FIELDS = [
 	},
 	{
 		"fieldname": STORE_FIELD,
+		"allow_on_submit": 1,
 		"label": "Shopify Store",
 		"fieldtype": "Link",
 		"options": "Shopify Store",
@@ -109,6 +112,16 @@ SALES_INVOICE_FIELDS = [
 		"read_only": 1,
 		"no_copy": 1,
 		"in_standard_filter": 1,
+	},
+	{
+		"fieldname": PAYMENT_ENTRY_FIELD,
+		"label": "Shopify Payment Entry",
+		"fieldtype": "Link",
+		"options": "Payment Entry",
+		"insert_after": STORE_FIELD,
+		"read_only": 1,
+		"no_copy": 1,
+		"description": "The Payment Entry this connector created for the invoice. It is claimed atomically so a retry can never record the same money twice.",
 	},
 ]
 
@@ -149,6 +162,7 @@ DELIVERY_NOTE_FIELDS = [
 	},
 	{
 		"fieldname": STORE_FIELD,
+		"allow_on_submit": 1,
 		"label": "Shopify Store",
 		"fieldtype": "Link",
 		"options": "Shopify Store",

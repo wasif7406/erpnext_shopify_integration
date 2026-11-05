@@ -11,7 +11,7 @@ import html
 import frappe
 from frappe.utils import add_days, add_to_date, cint, get_datetime, now_datetime
 
-from .constants import STORE_DOCTYPE
+from .constants import LOG_RETENTION_DAYS, STORE_DOCTYPE
 from .utils import log_error
 
 
@@ -22,7 +22,7 @@ def poll_all_stores():
 	# Enqueue the *locked* wrapper, not the raw worker: cron and a manual
 	# "Poll Orders Now" must never process the same store concurrently.
 	_enqueue_for_stores(
-		"shopify_integration.tasks.manual_poll",
+		"shopify_integration.tasks.scheduled_poll",
 		"shopify-poll",
 		filters={"enabled": 1, "enable_shopify_to_erpnext": 1, "pull_orders": 1},
 	)
@@ -42,6 +42,26 @@ def old_order_sync():
 		"shopify-old-orders",
 		filters={"enabled": 1, "enable_shopify_to_erpnext": 1, "sync_old_orders": 1},
 	)
+
+
+def retry_failed_imports():
+	"""Replay orders that could not be imported (see `retry.py`)."""
+	from .retry import retry_due
+
+	try:
+		retry_due(limit=50)
+	except Exception:
+		log_error("Shopify: import retry job failed", frappe.get_traceback())
+
+
+def retry_failed_webhooks():
+	"""Replay failed / dead webhook deliveries (Shopify never retries a 200)."""
+	from .webhook import retry_failed
+
+	try:
+		retry_failed(limit=20)
+	except Exception:
+		log_error("Shopify: webhook retry job failed", frappe.get_traceback())
 
 
 def webhook_watchdog():
@@ -86,7 +106,7 @@ def daily_digest():
 			log_error("Shopify daily digest failed", f"{row}\n{frappe.get_traceback()}")
 
 
-def prune_logs(days: int = 90):
+def prune_logs(days: int = LOG_RETENTION_DAYS):
 	cutoff = add_days(now_datetime().date(), -days)
 	for doctype in ("Shopify Sync Run", "Shopify Webhook Log"):
 		if not frappe.db.exists("DocType", doctype):
@@ -107,7 +127,11 @@ def prune_logs(days: int = 90):
 # Manual entry points (enqueued by api.sync_now with background=1)
 # ---------------------------------------------------------------------------
 def manual_poll(store):
-	return run_locked("manual-poll", store, poll_store_locked)
+	return run_locked("manual-poll", store, poll_store_locked, trigger="Manual")
+
+
+def scheduled_poll(store):
+	return run_locked("manual-poll", store, poll_store_locked, trigger="Scheduler")
 
 
 def manual_inventory(store):
@@ -126,7 +150,7 @@ def manual_old_orders(store):
 # ---------------------------------------------------------------------------
 # Locked workers
 # ---------------------------------------------------------------------------
-def poll_store_locked(store):
+def poll_store_locked(store, trigger="Scheduler"):
 	from .config import StoreConfig
 	from .exceptions import ShopifyBudgetExhausted
 	from .order import poll_orders
@@ -136,7 +160,7 @@ def poll_store_locked(store):
 	if not cfg.enabled or not cfg.pull_enabled or not cfg.pull_orders:
 		return {"skipped": "pull disabled"}
 
-	with Run(store, mode="Orders", trigger="Scheduler") as run:
+	with Run(store, mode="Orders", trigger=trigger) as run:
 		try:
 			count = poll_orders(cfg, run)
 			run.note(f"polled {count} updated orders")
@@ -237,7 +261,14 @@ def _digest_store(store):
 		),
 		"webhooks": frappe.db.count("Shopify Webhook Log", {"store": store, "creation": (">=", cutoff)}),
 		"errors": frappe.db.count(
-			"Shopify Sync Run", {"store": store, "creation": (">=", cutoff), "status": "Failed"}
+			"Shopify Sync Run",
+			{"store": store, "creation": (">=", cutoff), "status": ("in", ["Failed", "Partial"])},
+		),
+		"retries open": frappe.db.count(
+			"Shopify Import Retry", {"store": store, "status": ("in", ["Pending", "Skipped"])}
+		),
+		"imports failed": frappe.db.count(
+			"Shopify Import Retry", {"store": store, "status": "Failed"}
 		),
 	}
 	unmapped = frappe.db.sql(
@@ -257,7 +288,8 @@ def _digest_store(store):
 	] + [f"  {name}: {value}" for name, value in counts.items()]
 	lines += [
 		f"  unmapped catalogue rows: {unmapped[0][0] if unmapped else 0}",
-		f"Last order poll: {cfg.last_order_sync_on or 'never'}",
+		f"Last order poll: {cfg.last_order_sync_on or 'never'}"
+		f" (lag {_lag_text(cfg.last_order_sync_on)})",
 		f"Last webhook: {cfg.last_webhook_on or 'never'}",
 		f"Last run: {cfg.last_run_result or 'never'}",
 	]
@@ -276,6 +308,20 @@ def _digest_store(store):
 			)
 		except Exception:
 			log_error("Shopify digest email failed", f"{store}\n{frappe.get_traceback()}")
+
+
+def _lag_text(value) -> str:
+	if not value:
+		return "never polled"
+	try:
+		minutes = int((now_datetime() - get_datetime(value)).total_seconds() // 60)
+	except Exception:
+		return "unknown"
+	if minutes < 0:
+		return "0 min"
+	if minutes < 60:
+		return f"{minutes} min"
+	return f"{minutes // 60} h {minutes % 60} min"
 
 
 def _notify(subject, message):

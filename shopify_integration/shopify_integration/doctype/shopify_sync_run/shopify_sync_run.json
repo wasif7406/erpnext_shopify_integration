@@ -56,7 +56,7 @@
    "fieldname": "trigger",
    "fieldtype": "Select",
    "label": "Trigger",
-   "options": "Scheduler\nWebhook\nManual\nHook"
+   "options": "Scheduler\nWebhook\nManual\nHook\nRetry"
   },
   {
    "fieldname": "status",

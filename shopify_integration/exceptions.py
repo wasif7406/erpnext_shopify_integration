@@ -42,5 +42,13 @@ class ShopifyDuplicateDocument(ShopifyIntegrationError):
 	"""Another run already created the document this run wanted to create."""
 
 
+class ShopifyRetryableError(ShopifyIntegrationError):
+	"""A transient collision/contention: the order should be retried later.
+
+	Raised instead of proceeding unlocked when a per-order/per-customer lock is
+	held by another worker, so two runs can never create the same master.
+	"""
+
+
 class ShopifyAmbiguousCompany(ShopifyConfigError):
 	"""A store serves several companies and an order matches more than one."""

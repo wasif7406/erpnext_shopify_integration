@@ -15,7 +15,7 @@ directions off by default**.
 | Company | one company per site | one store can serve several companies (N:M) |
 | Direction | always on when enabled | two master switches, **both default OFF** |
 | Order owner | no field | `Sales Order.custom_shopify_store` |
-| Duplicate protection | per-order id check | per-order id check + per-store lock + compare-and-swap |
+| Duplicate protection | per-order id check | per-order + per-customer lock, conditional claim on link fields, unique map indexes, persistent retry queue |
 | History | `Ecommerce Integration Log` | `Shopify Sync Run`, `Shopify Webhook Log`, `Shopify Item/Customer Map` |
 | Runtime | `shopify` + `pyactiveresource` | plain `requests` REST client |
 | Webhooks | one URL for the site | one URL + key per store, HMAC per store |
@@ -204,6 +204,8 @@ always opt-in.
 | Job | Frequency | Function |
 |---|---|---|
 | Order poll | `*/15 * * * *` | `tasks.poll_all_stores` → locked per store |
+| Failed invoice/DN webhook replay | `*/15 * * * *` | `tasks.retry_failed_webhooks` |
+| Failed order import replay | `*/10 * * * *` | `tasks.retry_failed_imports` (row-driven backoff) |
 | Inventory push | `*/5 * * * *` | `tasks.push_inventory_all_stores` (each store obeys its own interval) |
 | Old-order backfill | `*/30 * * * *` | `tasks.old_order_sync` (only when `Sync Old Orders` is ticked) |
 | Webhook watchdog | daily 07:00 | alerts if a pulling store received no webhook for 24 h |
@@ -214,22 +216,37 @@ Webhooks are the primary path; the 15-minute poll is the safety net and uses
 `updated_at_min` with a small overlap, so a missed delivery is picked up without
 re-importing the catalogue.
 
-Every job takes `filelock("shopify-<kind>-<store>")`, so cron, a manual
-**Poll Orders Now** and a webhook job can never process the same store
-concurrently.
+Every cron job takes `filelock("shopify-<kind>-<store>")`, so the 15-minute
+poll, the retry queue, a manual **Poll Orders Now** and inventory push can never
+process the same store concurrently. Webhook jobs are not serialised per store
+(that would make one slow order block the whole shop); they take a **per-order**
+lock inside `import_order`, which is the granularity that matters.
 
 ### 4.1 Idempotency
 
 * Sales Order: `(custom_shopify_store, shopify_order_id)`; a legacy row without
-  a store is adopted, never duplicated.
-* Sales Invoice and Delivery Note: same key (+ `shopify_fulfillment_id` for a
-  DN), plus a per-order/per-fulfillment `filelock`.
+  a store (old connector) or with only `po_no` (historical CSV import) is
+  adopted under a conditional `UPDATE`, never duplicated. An existing order is
+  always refreshed, even when it predates the pull cutoff.
+* Sales Invoice: `(store, shopify_order_id)`, and the invoice is **skipped**
+  when the Sales Order is already billed by another process (PostEx / manual).
+* Payment Entry: claimed on `Sales Invoice.custom_shopify_payment_entry` with a
+  conditional `UPDATE`; a lost race cancels the duplicate it just created.
+* Delivery Note: `(store, shopify_fulfillment_id)`, per-fulfillment lock, and
+  the quantity is clamped to what is still pending on the Sales Order.
 * Item and Customer: `Shopify Item Map` / `Shopify Customer Map`, unique per
-  store.
+  store (enforced by a unique index, see patch `v0_2.unique_map_indexes`).
 * Webhook: `X-Shopify-Webhook-Id`; a repeated delivery is acknowledged and
-  ignored.
-* Link fields are claimed with a conditional `UPDATE … WHERE field IS NULL`
-  (`utils.claim_field`) before any document is kept.
+  ignored, and `attempts` caps the automatic replay.
+
+### 4.1.1 Failures are retried
+
+A failed import (API error, contention, untaxed title, unmapped product) is
+written to `Shopify Import Retry` and replayed every 10 minutes with exponential
+backoff (6 attempts). A `Skipped` row means a product has no explicit Item Map:
+it is retried once a day, so adding the mapping makes the order import itself.
+A failed webhook delivery — Shopify never retries after a `200` — is replayed
+every 15 minutes (5 attempts). **Shopify Orders Not Imported** is the worklist.
 
 ### 4.2 Posting dates
 

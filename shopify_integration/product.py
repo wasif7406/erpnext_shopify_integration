@@ -122,7 +122,17 @@ def remember_item(
 		return doc
 
 	doc = frappe.get_doc({"doctype": ITEM_MAP_DOCTYPE, **values})
-	doc.insert(ignore_permissions=True, ignore_mandatory=True)
+	try:
+		doc.insert(ignore_permissions=True, ignore_mandatory=True)
+	except frappe.UniqueValidationError:
+		# Another worker mapped the same (store, product, variant) first.
+		frappe.db.rollback()
+		name = _scalar(
+			"select name from `tabShopify Item Map` where store=%s and product_id=%s "
+			"and ifnull(variant_id, '')=%s limit 1",
+			(cfg.name, product_id, variant_id),
+		)
+		return frappe.get_doc(ITEM_MAP_DOCTYPE, name) if name else None
 	return doc
 
 

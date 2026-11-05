@@ -286,13 +286,16 @@ after the run so the scheduler does not repeat it.
 | Risk | Mitigation |
 |---|---|
 | Webhook + poll import the same order | `(store, order_id)` lookup inside a per-order `filelock`, re-checked after acquiring the lock |
-| Two DNs / invoices for one fulfillment | per-fulfillment `filelock` + `(store, shipment id)` lookup |
-| Two runs create the same link | `utils.claim_field` conditional UPDATE before keeping a created document |
+| Two DNs / invoices for one fulfillment | per-fulfillment `filelock` + `(store, shipment id)` lookup + pending-quantity clamp |
+| Two runs create the same link | `utils.claim_field` conditional UPDATE before keeping a created document (Sales Order adoption, Payment Entry) |
+| Two customers / items for one Shopify id | per-customer `filelock` that waits instead of proceeding, plus a unique index on the mapping tables |
 | Duplicate webhook delivery | `X-Shopify-Webhook-Id` existing log is acknowledged and ignored |
 | Two cron ticks for one store | `filelock("shopify-<kind>-<store>")`, timeout 0 |
-| A broken order blocks the queue | errors are recorded per run; the poll continues; a permanently broken order is reported in `Shopify Sync Run` |
+| A broken order blocks the queue | errors are recorded in `Shopify Import Retry` and replayed with backoff; the poll continues |
+| A failed async webhook job is lost | sweeper replays `Shopify Webhook Log` rows in `Error` / stale `Queued` (capped attempts) |
+| Poll window skipped after a crash | `last_order_sync_on` only advances when the poll completed |
 | API budget blowout | one `RequestBudget` per run, shared by every client call; the run stops cleanly and reports `budget exhausted` |
-| Rate limits | 0.5 s between calls, `Retry-After` honoured on 429, bounded 5xx retries |
+| Rate limits | 0.5 s between calls (~2 req/s), `Retry-After` honoured on 429, bounded 5xx retries |
 
 ---
 
@@ -353,6 +356,7 @@ manual step because both enabled at once would import every order twice.
 | Customers / addresses / contacts | `customer.py` |
 | Products, item pull and push | `product.py` |
 | Orders, poll, backfill, cancel | `order.py` |
+| Order-import retry queue | `retry.py`, doctype `shopify_import_retry` |
 | Invoice + Payment Entry | `invoice.py` |
 | Delivery notes | `fulfillment.py` |
 | Inventory push | `inventory.py` |

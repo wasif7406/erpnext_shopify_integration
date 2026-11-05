@@ -132,11 +132,18 @@ def _posting_date(fulfillment):
 
 
 def _fulfillment_items(cfg: StoreConfig, dn_items, fulfillment_items, warehouse):
-	"""Keep only what this fulfillment actually shipped, at its location."""
+	"""Keep only what this fulfillment actually shipped, at its location.
+
+	The quantity is clamped to what is still pending on the Sales Order, so a
+	Shopify fulfillment can never over-ship an order that another system (PostEx)
+	already delivered in part.
+	"""
 	if not fulfillment_items:
 		for item in dn_items:
 			item.warehouse = warehouse
 		return dn_items
+
+	from .payloads import clamp_fulfillment_qty
 
 	remaining = list(fulfillment_items)
 	result = []
@@ -149,7 +156,7 @@ def _fulfillment_items(cfg: StoreConfig, dn_items, fulfillment_items, warehouse)
 		if not match:
 			continue
 		remaining.remove(match)
-		dn_item.qty = match.get("quantity") or dn_item.qty
+		dn_item.qty = clamp_fulfillment_qty(dn_item.qty, match.get("quantity"))
 		dn_item.warehouse = warehouse
 		if not dn_item.qty:
 			continue
@@ -330,10 +337,8 @@ def _log_push_run(cfg, dn, fulfillment):
 # ---------------------------------------------------------------------------
 def handle_webhook_fulfilled(payload, store=None, request_id=None):
 	cfg = config(store)
-	if cfg.is_historical(payload):
-		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Delivery Notes", trigger="Webhook") as run:
-		so = find_sales_order(cfg, payload.get("id"))
+		so = find_sales_order(cfg, payload.get("id"), payload.get("name"))
 		if not so:
 			from .order import import_order
 

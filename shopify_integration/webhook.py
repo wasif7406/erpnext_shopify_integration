@@ -28,7 +28,6 @@ def receive(store=None, key=None):
 	store_doc, error = _resolve_store(store, key)
 	if error:
 		return _respond(False, error, status_code=404)
-
 	raw_body = _raw_body()
 	topic = _header("X-Shopify-Topic") or _form("topic") or ""
 	webhook_id = _header("X-Shopify-Webhook-Id") or ""
@@ -117,6 +116,7 @@ def run_handler(handler_path: str, payload: dict, store: str, request_id: str | 
 	# user, and ERPNext's item permission check then rejects the Sales Order.
 	# The connector always writes as Administrator, like the legacy app did.
 	frappe.set_user("Administrator")
+	_bump_attempts(request_id)
 	handler = frappe.get_attr(handler_path)
 	try:
 		result = handler(payload=payload, store=store, request_id=request_id)
@@ -125,6 +125,75 @@ def run_handler(handler_path: str, payload: dict, store: str, request_id: str | 
 		raise
 	_mark_log(request_id, "Success", json.dumps(result, default=str)[:1000])
 	return result
+
+
+def _bump_attempts(request_id):
+	if not request_id or not frappe.db.exists(WEBHOOK_LOG_DOCTYPE, request_id):
+		return
+	try:
+		attempts = cint(frappe.db.get_value(WEBHOOK_LOG_DOCTYPE, request_id, "attempts")) + 1
+		frappe.db.set_value(
+			WEBHOOK_LOG_DOCTYPE, request_id, "attempts", attempts, update_modified=False
+		)
+		frappe.db.commit()
+	except Exception:
+		pass
+
+
+def retry_failed(limit: int = 20):
+	"""Replay webhook deliveries that failed or whose worker died.
+
+	Shopify considers a delivery done once it receives a 200, so a failed async
+	job must be replayed here or the event is lost. `attempts` is capped so a
+	permanently broken payload cannot loop forever.
+	"""
+	from frappe.utils import add_to_date
+
+	from .constants import MAX_WEBHOOK_ATTEMPTS, WEBHOOK_STALE_MINUTES
+
+	cutoff = add_to_date(now(), minutes=-WEBHOOK_STALE_MINUTES)
+	filters = [
+		["status", "=", "Error"],
+		["attempts", "<", MAX_WEBHOOK_ATTEMPTS],
+	]
+	rows = frappe.get_all(
+		WEBHOOK_LOG_DOCTYPE,
+		filters=filters,
+		fields=["name", "store", "topic", "request_data", "attempts"],
+		order_by="creation asc",
+		limit=limit,
+	)
+	stale = frappe.get_all(
+		WEBHOOK_LOG_DOCTYPE,
+		filters={
+			"status": ("in", ["Queued", "Running"]),
+			"modified": ("<", cutoff),
+			"attempts": ("<", MAX_WEBHOOK_ATTEMPTS),
+		},
+		fields=["name", "store", "topic", "request_data", "attempts"],
+		order_by="creation asc",
+		limit=limit,
+	)
+	replayed = 0
+	for row in rows + stale:
+		handler_path = WEBHOOK_HANDLERS.get(row.topic)
+		if not handler_path:
+			continue
+		try:
+			payload = json.loads(row.request_data) if row.request_data else None
+		except ValueError:
+			payload = None
+		if not payload:
+			continue
+		try:
+			run_handler(handler_path, payload, row.store, row.name)
+			replayed += 1
+		except Exception:
+			log_error(
+				"Shopify: webhook replay failed",
+				f"{row.name} / {row.topic}\n{frappe.get_traceback()}",
+			)
+	return replayed
 
 
 def _mark_log(request_id, status, result):
@@ -143,10 +212,15 @@ def _mark_log(request_id, status, result):
 # Request helpers
 # ---------------------------------------------------------------------------
 def _resolve_store(value, key):
-	"""Find the store from the path segment, then from the shop-domain header."""
+	"""Find the store from the path segment, then from the shop-domain header.
+
+	The per-store `webhook_key` path segment is verified whenever the store is
+	identified from the path: it is the extra defence the URL advertises. HMAC
+	over the raw body remains the real authentication.
+	"""
 	if value:
 		if frappe.db.exists("Shopify Store", value):
-			return get_store(value), None
+			return _check_key(get_store(value), key)
 		# Some shops put the domain in the path instead of the store name.
 		by_domain = find_store_by_domain(value)
 		if by_domain:
@@ -163,7 +237,10 @@ def _resolve_store(value, key):
 
 def _check_key(store_doc, key):
 	expected = store_doc.get("webhook_key") or ""
-	if key and expected and not hmac.compare_digest(str(expected), str(key)):
+	if not expected:
+		# The store was saved without a key (old data); HMAC still applies.
+		return store_doc, None
+	if not key or not hmac.compare_digest(str(expected), str(key)):
 		return None, "invalid webhook key"
 	return store_doc, None
 

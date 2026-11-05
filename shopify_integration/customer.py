@@ -13,6 +13,7 @@ from frappe.utils import cint
 
 from .config import StoreConfig, legacy_store_name
 from .constants import ADDRESS_ID_FIELD, CUSTOMER_ID_FIELD, CUSTOMER_MAP_DOCTYPE
+from .exceptions import ShopifyRetryableError
 from .utils import normalize_phone
 
 
@@ -129,14 +130,22 @@ def _remember_customer(cfg: StoreConfig, shopify_customer_id, customer):
 	)
 	if existing:
 		return
-	frappe.get_doc(
-		{
-			"doctype": CUSTOMER_MAP_DOCTYPE,
-			"store": cfg.name,
-			"shopify_customer_id": str(shopify_customer_id),
-			"customer": customer,
-		}
-	).insert(ignore_permissions=True, ignore_mandatory=True)
+	try:
+		frappe.get_doc(
+			{
+				"doctype": CUSTOMER_MAP_DOCTYPE,
+				"store": cfg.name,
+				"shopify_customer_id": str(shopify_customer_id),
+				"customer": customer,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+	except frappe.UniqueValidationError:
+		# Another worker inserted the same (store, customer id) row first; the
+		# unique index is the source of truth.
+		frappe.db.rollback()
+	except Exception:
+		frappe.db.rollback()
+		raise
 
 
 # ---------------------------------------------------------------------------
@@ -150,13 +159,28 @@ def ensure_customer(cfg: StoreConfig, company_cfg, order: dict, run=None):
 	# Two different orders of the same customer can be imported concurrently;
 	# one short lock per customer avoids duplicate Customer masters.
 	if shopify_customer_id:
+		import time
+
 		from frappe.utils.synchronization import LockTimeoutError, filelock
 
-		try:
-			with filelock(f"shopify-customer-{cfg.name}-{shopify_customer_id}", timeout=10):
-				return _ensure_customer_locked(cfg, company_cfg, order, customer_payload, shopify_customer_id, run)
-		except LockTimeoutError:
-			pass
+		for attempt in range(3):
+			try:
+				with filelock(f"shopify-customer-{cfg.name}-{shopify_customer_id}", timeout=10):
+					return _ensure_customer_locked(
+						cfg, company_cfg, order, customer_payload, shopify_customer_id, run
+					)
+			except LockTimeoutError:
+				# Never fall through unlocked: wait, then retry. Running the
+				# unlocked path is exactly how duplicate masters appear.
+				time.sleep(0.5 * (attempt + 1))
+
+		# The holder may have created it while we waited.
+		existing = find_customer(cfg, shopify_customer_id, payload=customer_payload)
+		if existing:
+			return existing
+		raise ShopifyRetryableError(
+			f"Customer {shopify_customer_id} is locked by another worker; the order will be retried."
+		)
 
 	return _ensure_customer_locked(cfg, company_cfg, order, customer_payload, shopify_customer_id, run)
 

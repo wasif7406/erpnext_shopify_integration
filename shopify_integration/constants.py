@@ -15,6 +15,25 @@ SYNC_RUN_DOCTYPE = "Shopify Sync Run"
 WEBHOOK_LOG_DOCTYPE = "Shopify Webhook Log"
 ITEM_MAP_DOCTYPE = "Shopify Item Map"
 CUSTOMER_MAP_DOCTYPE = "Shopify Customer Map"
+RETRY_DOCTYPE = "Shopify Import Retry"
+
+# ---------------------------------------------------------------------------
+# Retry policy
+# ---------------------------------------------------------------------------
+# A failed order import is retried from `Shopify Import Retry` with exponential
+# backoff (5, 10, 20 ... minutes, capped at one day). An order skipped because a
+# product has no explicit Item Map is retried once a day instead: the merchant
+# does not want every Shopify product created, but a map added later should
+# self-heal the order.
+MAX_IMPORT_ATTEMPTS = 6
+RETRY_BASE_MINUTES = 5
+RETRY_MAX_MINUTES = 1440
+SKIPPED_RETRY_MINUTES = 1440
+
+# Webhook deliveries that failed (or whose worker died) are replayed by the
+# sweeper at most this many times.
+MAX_WEBHOOK_ATTEMPTS = 5
+WEBHOOK_STALE_MINUTES = 10
 
 DEFAULT_API_VERSION = "2025-10"
 API_VERSIONS = [
@@ -76,6 +95,7 @@ ITEM_SELLING_RATE_FIELD = "shopify_selling_rate"
 ITEM_DISCOUNT_FIELD = "shopify_item_discount"
 ITEM_LINE_ID_FIELD = "shopify_line_item_id"
 STORE_FIELD = "custom_shopify_store"
+PAYMENT_ENTRY_FIELD = "custom_shopify_payment_entry"
 
 # ---------------------------------------------------------------------------
 # Routing
@@ -121,26 +141,9 @@ LEGACY_LOG_DOCTYPE = "Ecommerce Integration Log"
 # import failed transiently is retried even if it is not updated again.
 POLL_OVERLAP_MINUTES = 60
 
-# How many consecutive failures before a store is flagged instead of hammered.
-MAX_SYNC_FAILURES = 5
-
 # Safety ceiling, not a policy: `sync_page_size` / `run_request_budget` are the
 # knobs. The ceiling only prevents a mis-typed budget from running for hours.
 MAX_REQUESTS_HARD_CEILING = 5000
-
-# Financial statuses as Shopify reports them.
-FINANCIAL_STATUSES = [
-	"pending",
-	"authorized",
-	"partially_paid",
-	"paid",
-	"partially_refunded",
-	"refunded",
-	"voided",
-]
-
-# Statuses that mean the merchant has the money (or never will).
-PAID_STATUSES = ("paid", "partially_refunded", "refunded")
 
 # Fulfillment statuses.
 FULFILLMENT_STATUSES = ["", "partial", "fulfilled", "restocked"]

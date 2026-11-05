@@ -5,8 +5,10 @@ enabled it. This module keeps that behaviour but:
   * resolves the company (and its cash/bank account, series, cost center) from
     the store's company row;
   * is idempotent on `(store, shopify_order_id)`;
-  * never creates a second invoice for the same order, even if the webhook and
-    the poll race.
+  * never bills an order that another process (PostEx / a manual invoice) has
+    already billed;
+  * claims the Payment Entry with a conditional UPDATE, so a crash or a second
+    worker can never create two payments for one invoice.
 """
 
 import frappe
@@ -17,12 +19,14 @@ from .constants import (
 	ORDER_ID_FIELD,
 	ORDER_NUMBER_FIELD,
 	ORDER_STATUS_FIELD,
+	PAYMENT_ENTRY_FIELD,
 	POSTING_ORDER_DATE,
 	POSTING_PAID_DATE,
 	STORE_FIELD,
 )
-from .order import find_invoice, find_sales_order
-from .utils import Run, log_error, now, site_datetime
+from .order import find_invoice, find_sales_order, _refresh_existing_safe
+from .payloads import invoice_may_be_created
+from .utils import Run, claim_field, field_exists, log_error, now, site_datetime
 
 
 def ensure_invoice(cfg: StoreConfig, so, order: dict, run: Run | None = None):
@@ -34,6 +38,9 @@ def ensure_invoice(cfg: StoreConfig, so, order: dict, run: Run | None = None):
 	order_id = str(order.get("id"))
 	existing = find_invoice(cfg, order_id)
 	if existing:
+		# Resume an interrupted run: the invoice exists, maybe the payment does
+		# not (a crash between the two used to leave it unpaid forever).
+		_resume_payment(cfg, so, existing, run=run)
 		return existing
 
 	from frappe.utils.synchronization import LockTimeoutError, filelock
@@ -42,10 +49,44 @@ def ensure_invoice(cfg: StoreConfig, so, order: dict, run: Run | None = None):
 		with filelock(f"shopify-invoice-{cfg.name}-{order_id}", timeout=0):
 			existing = find_invoice(cfg, order_id)
 			if existing:
+				_resume_payment(cfg, so, existing, run=run)
 				return existing
+
+			other = _existing_so_invoice(so)
+			if not invoice_may_be_created(so.get("per_billed"), bool(other)):
+				if other:
+					# PostEx or a manual invoice already billed this order.
+					# Creating another would double revenue and receivable.
+					if run:
+						run.note(f"{so.name} is already invoiced by {other}; Shopify invoice skipped")
+					log_error(
+						"Shopify: invoice skipped, order already billed",
+						f"{cfg.name} / {so.name} is already invoiced by {other}.\n"
+						"Set 'Create Sales Invoice when Paid' off for this store, or the "
+						"invoice would be duplicated.",
+						"Sales Order",
+						so.name,
+					)
+				return other
 			return _create_invoice(cfg, so, order, run=run)
 	except LockTimeoutError:
 		return None
+
+
+def _existing_so_invoice(so):
+	"""Any submitted, non-return invoice raised against this Sales Order."""
+	rows = frappe.db.sql(
+		"""
+		select distinct si.name
+		from `tabSales Invoice` si
+		join `tabSales Invoice Item` sii on sii.parent = si.name
+		where sii.sales_order = %s and si.docstatus = 1 and ifnull(si.is_return, 0) = 0
+		order by si.creation desc
+		limit 1
+		""",
+		so.name,
+	)
+	return rows[0][0] if rows else None
 
 
 def _create_invoice(cfg: StoreConfig, so, order, run=None):
@@ -107,14 +148,43 @@ def _posting_date(company_cfg, order):
 	return parsed.date() if parsed else getdate(nowdate())
 
 
+# ---------------------------------------------------------------------------
+# Payment Entry (idempotent, resumable)
+# ---------------------------------------------------------------------------
+def _resume_payment(cfg: StoreConfig, so, invoice_name, run=None):
+	if not cfg.create_payment_entry or not invoice_name:
+		return None
+	try:
+		company_cfg = cfg.company_config(so.company)
+		si = frappe.get_doc("Sales Invoice", invoice_name)
+		return _make_payment_entry(cfg, company_cfg, si, run=run)
+	except Exception as exc:
+		log_error(
+			"Shopify: payment entry could not be resumed",
+			f"{cfg.name} / {invoice_name}\n{exc}\n{frappe.get_traceback()}",
+			"Sales Invoice",
+			invoice_name,
+		)
+		return None
+
+
 def _make_payment_entry(cfg, company_cfg, si, run=None):
-	"""Record the money Shopify already collected, into the mapped bank/cash."""
+	"""Record the money Shopify already collected, into the mapped bank/cash.
+
+	Idempotent: an existing Payment Entry for the invoice (or a claimed link
+	field) stops a second one, and a lost race cancels the one just created.
+	"""
 	if si.docstatus != 1 or si.grand_total <= 0:
 		return None
 	if si.outstanding_amount <= 0:
 		return None
 	if si.status in ("Paid", "Return"):
 		return None
+
+	existing = _payment_for_invoice(si)
+	if existing:
+		_claim_payment(si.name, existing)
+		return existing
 
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
@@ -151,9 +221,63 @@ def _make_payment_entry(cfg, company_cfg, si, run=None):
 		)
 		return None
 
+	# Conditional claim: if another worker already stored a different Payment
+	# Entry for this invoice, ours is the duplicate and is cancelled.
+	if not _claim_payment(si.name, payment.name):
+		_rollback_duplicate_payment(payment)
+		return _payment_for_invoice(si)
+
 	if run:
 		run.bump("payments_created")
 	return payment.name
+
+
+def _payment_for_invoice(si):
+	"""A submitted Payment Entry already linked to this invoice, or None."""
+	if field_exists("Sales Invoice", PAYMENT_ENTRY_FIELD):
+		claimed = frappe.db.get_value("Sales Invoice", si.name, PAYMENT_ENTRY_FIELD)
+		if claimed:
+			docstatus = frappe.db.get_value("Payment Entry", claimed, "docstatus")
+			if docstatus == 1:
+				return claimed
+
+	rows = frappe.db.sql(
+		"""
+		select pe.name
+		from `tabPayment Entry` pe
+		join `tabPayment Entry Reference` per on per.parent = pe.name
+		where per.reference_doctype = 'Sales Invoice'
+		  and per.reference_name = %s
+		  and pe.docstatus = 1
+		order by pe.creation desc
+		limit 1
+		""",
+		si.name,
+	)
+	return rows[0][0] if rows else None
+
+
+def _claim_payment(invoice_name, payment_name) -> bool:
+	if not field_exists("Sales Invoice", PAYMENT_ENTRY_FIELD):
+		# Field not migrated yet: the link table above is still the guard.
+		return True
+	return claim_field("Sales Invoice", invoice_name, PAYMENT_ENTRY_FIELD, payment_name)
+
+
+def _rollback_duplicate_payment(payment):
+	try:
+		payment.reload()
+		if payment.docstatus == 1:
+			payment.flags.ignore_permissions = True
+			payment.cancel()
+			frappe.db.commit()
+	except Exception:
+		log_error(
+			"Shopify: could not cancel duplicate payment entry",
+			f"{payment.name}\n{frappe.get_traceback()}",
+			"Payment Entry",
+			payment.name,
+		)
 
 
 # ---------------------------------------------------------------------------
@@ -161,19 +285,19 @@ def _make_payment_entry(cfg, company_cfg, si, run=None):
 # ---------------------------------------------------------------------------
 def handle_webhook_paid(payload, store=None, request_id=None):
 	cfg = config(store)
-	if cfg.is_historical(payload):
-		return {"order": payload.get("name"), "result": "before pull cutoff"}
 	with Run(cfg.name, mode="Invoices", trigger="Webhook") as run:
-		so = find_sales_order(cfg, payload.get("id"))
-		if not so:
-			# `orders/paid` can arrive before `orders/create` is processed.
+		so = find_sales_order(cfg, payload.get("id"), payload.get("name"))
+		if so:
+			# Refresh first: a paid event also carries the final status/edits,
+			# and `orders/updated` is not guaranteed to follow.
+			_refresh_existing_safe(cfg, so, payload, run=run)
+		else:
 			from .order import import_order
 
 			so, _result = import_order(cfg, payload, run=run, trigger="Webhook")
 		if not so:
 			return {"order": payload.get("name"), "result": "sales order not available"}
 
-		# `find_sales_order` may return a freshly adopted row; reload before use.
 		so.reload()
 		invoice = ensure_invoice(cfg, so, payload, run=run)
 	return {

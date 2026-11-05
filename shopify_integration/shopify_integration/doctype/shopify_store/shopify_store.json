@@ -276,8 +276,8 @@
    "label": "Create Delivery Note on Fulfillment"
   },
   {
-   "default": "0",
-   "description": "Cancel the Sales Order when Shopify cancels it, but only if no invoice and no delivery note exist.",
+   "default": "1",
+   "description": "Cancel the Sales Order when Shopify cancels the order, if no invoice and no delivery note exist. On by default.",
    "fieldname": "cancel_sales_order",
    "fieldtype": "Check",
    "label": "Cancel Sales Order from Shopify"
@@ -571,7 +571,7 @@
    "fieldname": "pull_orders_since",
    "fieldtype": "Datetime",
    "label": "Pull Orders Since",
-   "description": "Hard cutoff: orders created before this timestamp are never imported or refreshed. Set it to the moment you enable syncing to pull new orders only."
+   "description": "Hard cutoff for NEW orders only: orders created before this timestamp are not imported. Orders that already exist are still refreshed (status, edits, cancellations). Empty = no limit."
   }
  ],
  "index_web_pages_for_search": 0,

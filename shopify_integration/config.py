@@ -175,7 +175,7 @@ class StoreConfig:
 		self.shop_domain = normalize_shop_domain(store.shop_domain)
 		self.pull_orders_since = store.get("pull_orders_since") or None
 		self.pull_order_from = store.get("pull_order_from") or None
-		self.request_delay = max(0.25, float(store.request_delay_seconds or 0.5))
+		self.request_delay = max(0.5, float(store.request_delay_seconds or 0.5))
 		self.request_budget = min(
 			max(10, cint(store.run_request_budget) or 800),
 			MAX_REQUESTS_HARD_CEILING,
@@ -264,12 +264,19 @@ def config(store=None) -> StoreConfig:
 
 
 def config_for_sales_order(so) -> StoreConfig | None:
+	"""The store that owns this document, or None.
+
+	Never guesses across stores: a row without an explicit store is only
+	attributed when the site has exactly one enabled store (the normal
+	single-store install). With several stores the caller must not act.
+	"""
 	store = getattr(so, "custom_shopify_store", None) if so else None
-	if not store:
-		store = legacy_store_name()
-	if not store:
-		return None
-	return StoreConfig(store)
+	if store:
+		return StoreConfig(store)
+	stores = all_stores(only_enabled=True)
+	if len(stores) == 1:
+		return StoreConfig(stores[0].name)
+	return None
 
 
 def company_config_for_store(store, company: str) -> CompanyConfig:
@@ -322,11 +329,40 @@ def tax_account_for(cfg: StoreConfig, company_cfg: CompanyConfig, tax_title, cha
 		else company_cfg.default_sales_tax_account
 	)
 	if fallback:
+		_warn_unmapped(cfg, company_cfg, tax_title, charge_type)
 		return fallback
 
 	raise ShopifyConfigError(
 		f"Shopify Store {cfg.name}: tax '{tax_title}' ({charge_type}) is not mapped for company "
 		f"{company_cfg.company}. Add a row to Shopify Tax Account or set the default."
+	)
+
+
+def _warn_unmapped(cfg: StoreConfig, company_cfg: CompanyConfig, tax_title, charge_type):
+	"""Log a title that fell back to the default account, once per process.
+
+	Shopify sends the tax title printed on the order (e.g. `Sales Tax`, `GST`).
+	A new title is not fatal — it goes to the company default — but the merchant
+	should see it so the mapping can be sharpened.
+	"""
+	try:
+		seen = getattr(frappe.local, "shopify_tax_warned", None)
+		if seen is None:
+			seen = set()
+			frappe.local.shopify_tax_warned = seen
+		key = (cfg.name, company_cfg.company, (tax_title or "").strip().lower(), charge_type)
+		if key in seen:
+			return
+		seen.add(key)
+	except Exception:
+		return
+	from .utils import log_error
+
+	log_error(
+		"Shopify: unmapped tax title fell back to the default account",
+		f"store={cfg.name} company={company_cfg.company} title={tax_title!r} "
+		f"type={charge_type}. Add a Shopify Store Tax row if this is not the "
+		"intended account.",
 	)
 
 
