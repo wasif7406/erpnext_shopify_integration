@@ -182,6 +182,24 @@ OTHER_FIELDS = [
 	("Sales Order Item", ITEM_LINE_ID_FIELD, "Shopify Line Item Id", "Data", "item_code"),
 ]
 
+# Buttons that open the catalogue picker, placed next to the ids they fill.
+# They are custom fields (not part of the doctype JSON) so the app can add them
+# to a site that already exists, and they are created only when missing.
+ITEM_MAP_FIELDS = [
+	{
+		"fieldname": "custom_browse_shopify_products",
+		"label": "Browse Products…",
+		"fieldtype": "Button",
+		"insert_after": "product_id",
+	},
+	{
+		"fieldname": "custom_browse_shopify_variants",
+		"label": "Browse Variants…",
+		"fieldtype": "Button",
+		"insert_after": "variant_id",
+	},
+]
+
 
 def ensure_custom_fields():
 	"""Create only the fields that are missing. Never updates existing ones."""
@@ -207,6 +225,10 @@ def ensure_custom_fields():
 		}
 		if _ensure(doctype, spec):
 			created.append(f"{doctype}-{fieldname}")
+
+	for spec in ITEM_MAP_FIELDS:
+		if _ensure("Shopify Item Map", dict(spec)):
+			created.append(f"Shopify Item Map-{spec['fieldname']}")
 
 	frappe.clear_cache()
 	return created
