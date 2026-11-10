@@ -156,6 +156,27 @@ A mapping row needs the ERPNext Item plus one of:
 - **Shopify SKU** (easiest), or
 - **Shopify Product ID + Variant ID** (needed when the SKU is blank).
 
+#### Picking the product instead of typing it
+
+The ids are 13–14 digit numbers, so the desk offers a catalogue browser:
+
+- **`Shopify Item Map` → Shopify → Browse Products / Browse Variants** —
+  lists the store's live catalogue, searchable by title, handle, SKU, barcode,
+  product id or variant id. Choosing a product with a single variant fills
+  *Product ID, Variant ID, SKU, Inventory Item ID* in one go; a product with
+  several variants expands so you pick the exact variant. *Product only* fills
+  just the product id (for a template item).
+- **`Item` → Shopify → Link Shopify Product** — same dialog, and it writes the
+  `Shopify Item Map` row for that item (`Shopify Mappings` shows/links them).
+  The map row stays the single source of truth; no id is copied onto the item.
+- **`Shopify Store` → Add Item Mapping** — asks for the ERPNext Item, then the
+  same picker; *Enter IDs manually* is still there for edge cases.
+
+The catalogue is read from the Shopify Admin API once per store and cached for
+10 minutes (`push_inventory`/order sync are unaffected). A mapping cannot be
+silently stolen: if the product/variant already belongs to another item the
+call fails with that item's name, and the Item form offers to move it.
+
 If an order contains **any** product without a mapping, the whole order is
 **skipped** (nothing is created) and the reason is written to the Sync Run /
 Webhook Log. This is what makes it safe to run test products in Shopify
@@ -304,6 +325,10 @@ https://<site>/api/method/shopify_integration.webhook.receive/<store>/<webhook_k
 | `shopify_integration.api.push_item(item_code, store?)` | push one item |
 | `shopify_integration.api.push_customer(customer, store?)` | push one customer |
 | `shopify_integration.api.replay_webhook(log_name)` | re-run a stored payload |
+| `shopify_integration.api.picker_stores()` | enabled stores for the picker |
+| `shopify_integration.api.search_catalogue(store, term, mode, status, refresh)` | products / flattened variants for the desk picker (10-minute cache) |
+| `shopify_integration.api.map_item(item_code, store, product_id, variant_id, …)` | create/refresh a `Shopify Item Map` row (refuses to steal another item's mapping) |
+| `shopify_integration.api.item_mappings(item_code)` | every store mapping of one item |
 
 The guest endpoint is `shopify_integration.webhook.receive`.
 

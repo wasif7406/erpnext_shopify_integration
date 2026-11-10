@@ -11,8 +11,14 @@ required_apps = ["erpnext"]
 # ---------------------------------------------------------------------------
 # Form scripts
 # ---------------------------------------------------------------------------
+# The catalogue picker is shared by several forms, so it is loaded once on
+# every desk page instead of being inlined in each doctype script.
+app_include_js = ["public/js/shopify_picker.js"]
+
 doctype_js = {
 	"Shopify Store": "public/js/shopify_store.js",
+	"Shopify Item Map": "public/js/shopify_item_map.js",
+	"Item": "public/js/item.js",
 	"Sales Order": "public/js/sales_order.js",
 	"Sales Invoice": "public/js/sales_invoice.js",
 }

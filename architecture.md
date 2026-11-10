@@ -156,6 +156,22 @@ itself never depends on them.
 * `Shopify Webhook Log` — store, topic, `X-Shopify-Webhook-Id`, order id,
   status, result, payload, traceback. Failed rows can be replayed.
 
+### 5.6 Catalogue picker (desk only)
+
+Mapping a product by typing a 13-digit id is error-prone, so the desk can pick
+from the live catalogue. `api.search_catalogue` reads `products.json`
+(`fields=id,title,handle,status,product_type,vendor,image,variants`), normalises
+it in `picker.py` (pure, unit-tested) and caches the result per store for
+10 minutes — the REST API has no text search, so the term is matched in memory
+against title, handle, type, vendor, ids, SKUs and barcodes. `mode=variants`
+flattens one row per variant with its product context.
+
+Writing a mapping always goes through `api.map_item` → `product.remember_item`,
+so the `Shopify Item Map` row stays the only source of truth: nothing is
+duplicated onto the Item master, and a product already owned by another item is
+refused unless the caller explicitly forces it. The picker never creates
+documents and never posts to Shopify.
+
 ---
 
 ## 6. Resolution rules

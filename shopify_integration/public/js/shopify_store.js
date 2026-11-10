@@ -235,6 +235,79 @@ function add_item_mapping(frm) {
 				reqd: 1,
 			},
 			{
+				fieldname: "hint",
+				fieldtype: "HTML",
+				options: `<p class="text-muted small">${__(
+					"Next, pick the product or variant from this store's live catalogue. The product ID, variant ID and SKU are filled in automatically."
+				)}</p>`,
+			},
+		],
+		primary_action_label: __("Choose Shopify Product…"),
+		primary_action(values) {
+			if (!values.item_code) {
+				frappe.msgprint(__("Select an ERPNext Item first."));
+				return;
+			}
+			dialog.hide();
+			shopify_integration.picker.open({
+				store: frm.doc.name,
+				title: __("Select a Shopify product for {0}", [values.item_code]),
+				on_select(row) {
+					map_picked_item(frm, values.item_code, row);
+				},
+			});
+		},
+		secondary_action_label: __("Enter IDs manually"),
+		secondary_action() {
+			dialog.hide();
+			add_item_mapping_manual(frm);
+		},
+	});
+	dialog.show();
+}
+
+function map_picked_item(frm, item_code, row) {
+	frappe.call({
+		method: "shopify_integration.api.map_item",
+		args: {
+			item_code: item_code,
+			store: frm.doc.name,
+			product_id: row.product_id,
+			variant_id: row.variant_id || null,
+			sku: row.sku || null,
+			inventory_item_id: row.inventory_item_id || null,
+			has_variants: row.variant_id ? 0 : 1,
+		},
+		freeze: true,
+		freeze_message: __("Saving the mapping…"),
+		callback(response) {
+			if (response.exc) return;
+			const mapping = response.message || {};
+			frappe.show_alert({
+				message: __("{0} mapped to {1}", [item_code, mapping.name || __("Shopify Item Map")]),
+				indicator: "green",
+			});
+			frm.reload_doc();
+		},
+	});
+}
+
+function add_item_mapping_manual(frm) {
+	if (frm.is_new()) {
+		frappe.msgprint(__("Save the store first."));
+		return;
+	}
+	const dialog = new frappe.ui.Dialog({
+		title: __("Map a Shopify product to an ERPNext Item"),
+		fields: [
+			{
+				fieldname: "item_code",
+				fieldtype: "Link",
+				options: "Item",
+				label: __("ERPNext Item"),
+				reqd: 1,
+			},
+			{
 				fieldname: "sku",
 				fieldtype: "Data",
 				label: __("Shopify SKU"),

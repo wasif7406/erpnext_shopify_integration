@@ -6,8 +6,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from . import constants
-from .client import ShopifyClient
+from . import constants, picker
+from .client import RequestBudget, ShopifyClient
 from .config import StoreConfig, legacy_store_name
 from .constants import WEBHOOK_TOPICS
 from .shopify_integration.doctype.shopify_store.shopify_store import build_webhook_url
@@ -347,6 +347,227 @@ def replay_webhook(log_name):
 	payload = json.loads(log.request_data)
 	frappe.db.set_value("Shopify Webhook Log", log_name, {"status": "Running", "traceback": ""})
 	return run_handler(handler, payload, log.store, log_name)
+
+
+# ---------------------------------------------------------------------------
+# Catalogue picker (the "browse Shopify products" dialogs)
+# ---------------------------------------------------------------------------
+CATALOGUE_TTL_SECONDS = 600
+CATALOGUE_BUDGET = 200
+
+
+@frappe.whitelist()
+def picker_stores():
+	"""Enabled stores, for the picker's store selector."""
+	_check_picker_permission()
+	return frappe.get_all(
+		constants.STORE_DOCTYPE,
+		filters={"enabled": 1},
+		fields=["name", "store_name", "shop_domain"],
+		order_by="creation asc",
+	)
+
+
+@frappe.whitelist()
+def search_catalogue(store=None, term=None, mode="products", status=None, refresh=0, limit=None):
+	"""Products (or flattened variants) for the desk picker dialogs.
+
+	Shopify's REST API cannot search products by text, so the catalogue is
+	downloaded once per store and cached for `CATALOGUE_TTL_SECONDS`; the term
+	is then matched in memory. `refresh=1` re-reads it from Shopify.
+	"""
+	_check_picker_permission()
+	store_name = _resolve_store(store)
+	cfg = StoreConfig(store_name)
+
+	payload = _catalogue(cfg, status=status, refresh=cint(refresh))
+	if (mode or "products").strip().lower() == "variants":
+		matches = picker.search_variants(payload["products"], term)
+	else:
+		matches = picker.search_products(payload["products"], term)
+	rows, total = picker.clamp(matches, limit)
+
+	return {
+		"store": store_name,
+		"mode": mode,
+		"rows": rows,
+		"total_matches": total,
+		"fetched": len(payload["products"]),
+		"truncated": payload["truncated"],
+		"cached_on": payload["cached_on"],
+	}
+
+
+@frappe.whitelist()
+def map_item(
+	item_code,
+	store=None,
+	product_id=None,
+	variant_id=None,
+	sku=None,
+	inventory_item_id=None,
+	has_variants=0,
+	force=0,
+):
+	"""Create/refresh the Shopify Item Map row for an ERPNext item.
+
+	Used by the Item form and by the picker on `Shopify Item Map`. Never
+	silently re-points a product/variant that another item already owns.
+	"""
+	if not frappe.db.exists("Item", item_code):
+		frappe.throw(_("Item {0} does not exist.").format(item_code))
+	if not frappe.has_permission(constants.ITEM_MAP_DOCTYPE, "write"):
+		frappe.throw(_("Not permitted to change Shopify Item Map rows."), frappe.PermissionError)
+
+	store_name = _resolve_store(store)
+	cfg = StoreConfig(store_name)
+	product_id = str(product_id or "").strip()
+	variant_id = str(variant_id or "").strip()
+	if not product_id:
+		frappe.throw(_("A Shopify Product ID is required."))
+
+	owner = _mapping_for(cfg.name, product_id, variant_id)
+	if owner and owner[1] != item_code and not cint(force):
+		frappe.throw(
+			_("Shopify product {0}{1} is already mapped to Item {2}. Open that mapping, or confirm "
+			  "to move it to {3}.").format(
+				product_id,
+				" / variant {0}".format(variant_id) if variant_id else "",
+				owner[1],
+				item_code,
+			)
+		)
+
+	# Keep the template link of an existing row: the picker knows the product and
+	# variant ids, but not which ERPNext template the variant belongs to.
+	existing_variant_of = None
+	if owner:
+		existing_variant_of = frappe.db.get_value(constants.ITEM_MAP_DOCTYPE, owner[0], "variant_of")
+
+	from .product import remember_item
+
+	doc = remember_item(
+		cfg,
+		item_code,
+		product_id,
+		variant_id=variant_id,
+		sku=sku or None,
+		has_variants=cint(has_variants),
+		variant_of=existing_variant_of,
+		inventory_item_id=inventory_item_id or None,
+	)
+	if not doc:
+		frappe.throw(_("Could not store the mapping for {0}.").format(item_code))
+	frappe.db.commit()
+	return {
+		"name": doc.name,
+		"item_code": doc.item_code,
+		"store": doc.store,
+		"product_id": doc.product_id,
+		"variant_id": doc.variant_id,
+		"sku": doc.sku,
+	}
+
+
+@frappe.whitelist()
+def item_mappings(item_code):
+	"""Every store mapping of one item (shown on the Item form)."""
+	if not frappe.has_permission(constants.ITEM_MAP_DOCTYPE, "read"):
+		frappe.throw(_("Not permitted to read Shopify Item Map rows."), frappe.PermissionError)
+	return frappe.get_all(
+		constants.ITEM_MAP_DOCTYPE,
+		filters={"item_code": item_code},
+		fields=["name", "store", "product_id", "variant_id", "sku", "has_variants", "item_synced_on"],
+		order_by="creation asc",
+	)
+
+
+def _catalogue(cfg: StoreConfig, status=None, refresh=False):
+	"""Normalised product list for a store, cached per status filter."""
+	status = (status or "").strip().lower()
+	if status in ("", "all", "any"):
+		status = ""
+
+	key = "shopify_integration:catalogue:{0}:{1}".format(cfg.name, status or "any")
+	cache = _cache_backend()
+	if cache and not cint(refresh):
+		try:
+			cached = cache.get_value(key)
+			if cached:
+				return cached
+		except Exception:
+			pass
+
+	client = ShopifyClient(cfg, budget=RequestBudget(min(cfg.request_budget, CATALOGUE_BUDGET)))
+	params = {"fields": picker.FIELDS}
+	if status:
+		params["status"] = status
+
+	products = []
+	truncated = False
+	for raw in client.paginate("products.json", "products", params=params):
+		products.append(picker.normalize_product(raw))
+		if len(products) >= picker.MAX_PRODUCTS:
+			truncated = True
+			break
+
+	payload = {
+		"products": picker.sort_products(products),
+		"truncated": truncated,
+		"cached_on": now_dt(),
+	}
+	if cache:
+		try:
+			cache.set_value(key, payload, expires_in_sec=CATALOGUE_TTL_SECONDS)
+		except Exception:
+			pass
+	return payload
+
+
+def _cache_backend():
+	"""`frappe.cache` is callable on older versions and an object on newer ones."""
+	try:
+		cache = frappe.cache
+		return cache() if callable(cache) else cache
+	except Exception:
+		return None
+
+
+def _resolve_store(store=None) -> str:
+	store = (store or "").strip()
+	if store:
+		if not frappe.db.exists(constants.STORE_DOCTYPE, store):
+			frappe.throw(_("Shopify Store {0} does not exist.").format(store))
+		return store
+	rows = frappe.get_all(
+		constants.STORE_DOCTYPE,
+		filters={"enabled": 1},
+		pluck="name",
+		order_by="creation asc",
+		limit=1,
+	)
+	if not rows:
+		frappe.throw(_("No enabled Shopify Store exists. Create one first."))
+	return rows[0]
+
+
+def _mapping_for(store, product_id, variant_id=None):
+	"""(map name, item_code) already holding this product/variant, or None."""
+	rows = frappe.db.sql(
+		"select name, item_code from `tabShopify Item Map` where store=%s and product_id=%s "
+		"and ifnull(variant_id, '')=%s limit 1",
+		(store, str(product_id), str(variant_id or "")),
+	)
+	return rows[0] if rows else None
+
+
+def _check_picker_permission():
+	"""Reading the catalogue is allowed to anyone who may read item mappings."""
+	if "System Manager" in frappe.get_roles():
+		return
+	if frappe.has_permission(constants.ITEM_MAP_DOCTYPE, "read"):
+		return
+	frappe.throw(_("Not permitted to browse the Shopify catalogue."), frappe.PermissionError)
 
 
 # ---------------------------------------------------------------------------
