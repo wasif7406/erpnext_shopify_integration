@@ -182,21 +182,16 @@ OTHER_FIELDS = [
 	("Sales Order Item", ITEM_LINE_ID_FIELD, "Shopify Line Item Id", "Data", "item_code"),
 ]
 
-# Buttons that open the catalogue picker, placed next to the ids they fill.
-# They are custom fields (not part of the doctype JSON) so the app can add them
-# to a site that already exists, and they are created only when missing.
+# One button that opens the catalogue picker (it switches between products and
+# variants internally). It is a custom field (not part of the doctype JSON) so
+# the app can add it to a site that already exists, and it is created only when
+# missing.
 ITEM_MAP_FIELDS = [
 	{
-		"fieldname": "custom_browse_shopify_products",
-		"label": "Browse Products…",
+		"fieldname": "custom_browse_shopify",
+		"label": "Browse Shopify Products…",
 		"fieldtype": "Button",
 		"insert_after": "product_id",
-	},
-	{
-		"fieldname": "custom_browse_shopify_variants",
-		"label": "Browse Variants…",
-		"fieldtype": "Button",
-		"insert_after": "variant_id",
 	},
 ]
 

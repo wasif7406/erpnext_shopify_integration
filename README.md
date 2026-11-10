@@ -160,14 +160,16 @@ A mapping row needs the ERPNext Item plus one of:
 
 The ids are 13–14 digit numbers, so the desk offers a catalogue browser:
 
-- **`Shopify Item Map` → *Browse Products…* / *Browse Variants…*** (buttons inside
-  the form, next to the ids, plus the same pair in the form header) —
+- **`Shopify Item Map` → *Browse Shopify Products*** (a button inside the form
+  next to the ids, plus the same action in the form header) — one dialog that
   lists the store's live catalogue, searchable by title, handle, SKU, barcode,
-  product id or variant id. Choosing a product with a single variant fills
-  *Product ID, Variant ID, SKU, Inventory Item ID* in one go; a product with
-  several variants expands so you pick the exact variant. *Product only* fills
-  just the product id (for a template item). The buttons work on a brand-new
-  mapping too: if the Store field is empty the dialog asks for it.
+  product id or variant id. Its *Show* selector switches the same dialog between
+  products and the flattened variant list. Choosing a product with a single
+  variant fills *Product ID, Variant ID, SKU, Inventory Item ID* in one go; a
+  product with several variants expands so you pick the exact variant.
+  *Product only* fills just the product id (for a template item). The button
+  works on a brand-new mapping too: if the Store field is empty the dialog asks
+  for it.
 - **`Item` → Shopify → Link Shopify Product** — same dialog, and it writes the
   `Shopify Item Map` row for that item (`Shopify Mappings` shows/links them).
   The map row stays the single source of truth; no id is copied onto the item.

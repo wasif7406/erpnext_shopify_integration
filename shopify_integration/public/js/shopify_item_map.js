@@ -2,11 +2,14 @@
  * Shopify Item Map: pick the product/variant from the live catalogue instead
  * of pasting numeric ids.
  *
+ * One button only: the dialog lists products and lets the merchant switch to
+ * the flattened variant list from its "Show" selector — two buttons opened the
+ * same dialog, which was just noise.
+ *
  * Two entry points are wired deliberately:
- *  - the buttons inside the form (`custom_browse_shopify_products` /
- *    `custom_browse_shopify_variants`, provisioned by `fields.py`), which are
- *    where the merchant looks for them;
- *  - the form-header buttons, which need no migration and work on a brand new
+ *  - the button inside the form (`custom_browse_shopify`, provisioned by
+ *    `fields.py`), which is where the merchant looks for it;
+ *  - the form-header button, which needs no migration and works on a brand new
  *    (not saved) mapping too.
  */
 frappe.ui.form.on("Shopify Item Map", {
@@ -18,41 +21,33 @@ frappe.ui.form.on("Shopify Item Map", {
 		prepare(frm);
 	},
 
-	custom_browse_shopify_products(frm) {
-		pick(frm, "products");
-	},
-
-	custom_browse_shopify_variants(frm) {
-		pick(frm, "variants");
+	custom_browse_shopify(frm) {
+		pick(frm);
 	},
 });
 
 function prepare(frm) {
 	if (!frm.__shopify_picker_buttons) {
 		frm.__shopify_picker_buttons = true;
-		frm.add_custom_button(__("Browse Shopify Products"), () => pick(frm, "products"));
-		frm.add_custom_button(__("Browse Shopify Variants"), () => pick(frm, "variants"));
+		frm.add_custom_button(__("Browse Shopify Products"), () => pick(frm));
 	}
 
 	// The picker can ask for the store itself, so a missing store is a hint,
-	// never a reason to hide the buttons.
+	// never a reason to hide the button.
 	if (frm.doc.store) {
 		if (frm.dashboard.clear_headline) frm.dashboard.clear_headline();
 	} else {
 		frm.dashboard.set_headline(
-			__("Pick the product with “Browse Products” — the store is chosen in the dialog if the field is empty.")
+			__("Pick the product with “Browse Shopify Products” — the store is chosen in the dialog if the field is empty.")
 		);
 	}
 }
 
-function pick(frm, mode) {
+function pick(frm) {
 	open_picker({
 		store: frm.doc.store || undefined,
-		mode: mode,
-		title:
-			mode === "variants"
-				? __("Select a Shopify Variant")
-				: __("Select a Shopify Product"),
+		mode: "products",
+		title: __("Select a Shopify Product"),
 		on_select(row) {
 			apply_row(frm, row);
 		},
