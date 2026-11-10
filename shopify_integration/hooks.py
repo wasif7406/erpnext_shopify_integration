@@ -11,10 +11,11 @@ required_apps = ["erpnext"]
 # ---------------------------------------------------------------------------
 # Form scripts
 # ---------------------------------------------------------------------------
-# The catalogue picker is shared by several forms, so it is loaded once on
-# every desk page instead of being inlined in each doctype script.
-app_include_js = ["public/js/shopify_picker.js"]
-
+# The catalogue picker (public/js/shopify_picker.js) is *not* listed in
+# `app_include_js`: a raw file path there is only injected when it is part of
+# the built assets, and a silently missing script would make the "Browse"
+# buttons do nothing. The form scripts load it on demand with `frappe.require`
+# instead, which resolves the /assets path directly and reports a real error.
 doctype_js = {
 	"Shopify Store": "public/js/shopify_store.js",
 	"Shopify Item Map": "public/js/shopify_item_map.js",

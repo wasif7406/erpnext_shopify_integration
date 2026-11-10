@@ -46,7 +46,7 @@ function prepare(frm) {
 }
 
 function pick(frm, mode) {
-	shopify_integration.picker.open({
+	open_picker({
 		store: frm.doc.store || undefined,
 		mode: mode,
 		title:
@@ -56,6 +56,43 @@ function pick(frm, mode) {
 		on_select(row) {
 			apply_row(frm, row);
 		},
+	});
+}
+
+/**
+ * Load the shared picker module on first use.
+ *
+ * It is deliberately not an `app_include_js` entry: if that include silently
+ * misses, the buttons do nothing at all. `frappe.require` resolves the asset
+ * path directly and surfaces a real error when it cannot.
+ */
+function open_picker(options) {
+	const ready =
+		window.shopify_integration &&
+		shopify_integration.picker &&
+		typeof shopify_integration.picker.open === "function";
+
+	if (ready) {
+		shopify_integration.picker.open(options);
+		return;
+	}
+
+	frappe.require("/assets/shopify_integration/js/shopify_picker.js", () => {
+		if (
+			window.shopify_integration &&
+			shopify_integration.picker &&
+			typeof shopify_integration.picker.open === "function"
+		) {
+			shopify_integration.picker.open(options);
+			return;
+		}
+		frappe.msgprint({
+			title: __("Shopify"),
+			indicator: "red",
+			message: __(
+				"Could not load the catalogue picker script. Reload the page with Ctrl+Shift+R and try again."
+			),
+		});
 	});
 }
 

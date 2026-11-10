@@ -249,7 +249,7 @@ function add_item_mapping(frm) {
 				return;
 			}
 			dialog.hide();
-			shopify_integration.picker.open({
+			open_picker({
 				store: frm.doc.name,
 				title: __("Select a Shopify product for {0}", [values.item_code]),
 				on_select(row) {
@@ -352,6 +352,35 @@ function add_item_mapping_manual(frm) {
 		},
 	});
 	dialog.show();
+}
+
+/** Load the shared picker on first use (see shopify_item_map.js for why). */
+function open_picker(options) {
+	const ready =
+		window.shopify_integration &&
+		shopify_integration.picker &&
+		typeof shopify_integration.picker.open === "function";
+	if (ready) {
+		shopify_integration.picker.open(options);
+		return;
+	}
+	frappe.require("/assets/shopify_integration/js/shopify_picker.js", () => {
+		if (
+			window.shopify_integration &&
+			shopify_integration.picker &&
+			typeof shopify_integration.picker.open === "function"
+		) {
+			shopify_integration.picker.open(options);
+			return;
+		}
+		frappe.msgprint({
+			title: __("Shopify"),
+			indicator: "red",
+			message: __(
+				"Could not load the catalogue picker script. Reload the page with Ctrl+Shift+R and try again."
+			),
+		});
+	});
 }
 
 function run_now(frm, mode) {

@@ -6,7 +6,7 @@ Anything that can differ per shop or per ERPNext company belongs in
 
 # Bumped whenever we need to prove which code a site is actually running; call
 # `shopify_integration.api.health` after a deploy and compare.
-BUILD = "2026-11-10.2"
+BUILD = "2026-11-10.3"
 
 APP = "shopify_integration"
 MODULE = "Shopify Integration"

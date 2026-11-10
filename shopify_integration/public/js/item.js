@@ -13,11 +13,40 @@ frappe.ui.form.on("Item", {
 });
 
 function link_product(frm) {
-	shopify_integration.picker.open({
+	open_picker({
 		title: __("Link {0} to a Shopify product", [frm.doc.name]),
 		on_select(row) {
 			send_mapping(frm, row, 0);
 		},
+	});
+}
+
+/** Load the shared picker on first use (see shopify_item_map.js for why). */
+function open_picker(options) {
+	const ready =
+		window.shopify_integration &&
+		shopify_integration.picker &&
+		typeof shopify_integration.picker.open === "function";
+	if (ready) {
+		shopify_integration.picker.open(options);
+		return;
+	}
+	frappe.require("/assets/shopify_integration/js/shopify_picker.js", () => {
+		if (
+			window.shopify_integration &&
+			shopify_integration.picker &&
+			typeof shopify_integration.picker.open === "function"
+		) {
+			shopify_integration.picker.open(options);
+			return;
+		}
+		frappe.msgprint({
+			title: __("Shopify"),
+			indicator: "red",
+			message: __(
+				"Could not load the catalogue picker script. Reload the page with Ctrl+Shift+R and try again."
+			),
+		});
 	});
 }
 
